@@ -48,6 +48,19 @@ protected:
   /// Even if the returnMap fails, return the best values found for stress and internal parameters
   bool _ignore_failures;
 
+  /// Set to true in input file to use radial return map
+  bool _radial_return;
+
+  /// Set to true in input file to use radial return map consistent tangent operator
+  /// this will eventually disappear --- just here to toggle for time comparison
+  bool _radial_return_tan;
+
+  /// rR pre-sized and/or defined vectors
+  /// might want private
+  std::vector<bool> _act_vary_rR;
+  RankTwoTensor _iden;
+  RankFourTensor _iden4;
+
   /// The type of tangent operator to return.  tangent operator = d(stress_rate)/d(strain_rate).
   enum TangentOperatorEnum {
     elastic, linear, nonlinear
@@ -132,10 +145,6 @@ protected:
   /// Strain increment that can be rotated by this class, and split into multiple increments (ie, its not const)
   RankTwoTensor _my_strain_increment;
 
-
-
-
-
   /**
    * makes all deactivated_due_to_ld false, and if >0 of them were initially true, returns true
    */
@@ -146,22 +155,6 @@ protected:
    * counts the number of active constraints
    */
   virtual unsigned int numberActive(const std::vector<bool> & active);
-
-
-  /**
-   * The residual-squared
-   * @param pm the plastic multipliers for all constraints
-   * @param f the active yield function(s) (not including the ones that are deactivated_due_to_ld)
-   * @param epp the plastic strain increment constraint
-   * @param ic the active internal constraint(s) (not including the ones that are deactivated_due_to_ld)
-   * @param active true if constraint is active
-   * @param deactivated_due_to_ld true if constraint has been temporarily deactivated due to linear dependence of flow directions
-   */
-  virtual Real residual2(const std::vector<Real> & pm, const std::vector<Real> & f,
-                         const RankTwoTensor & epp, const std::vector<Real> & ic,
-                         const std::vector<bool> & active,
-                         const std::vector<bool> & deactivated_due_to_ld);
-
 
   /**
    * Implements the return map
@@ -191,43 +184,6 @@ protected:
    */
   virtual bool returnMap(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & f, unsigned int & iter, const bool & can_revert_to_dumb, bool & linesearch_needed, bool & ld_encountered, bool & constraints_added, const bool & final_step, RankFourTensor & consistent_tangent_operator, std::vector<Real> & cumulative_pm);
 
-
-  /**
-   * Performs a line search.  Algorithm is taken straight from
-   * "Numerical Recipes".  Given the changes dstress, dpm and dintnl
-   * provided by the nrStep routine, a line-search looks for an appropriate
-   * under-relaxation that reduces the residual-squared (nr_res2).
-   *
-   * Most variables are input/output variables: they enter the function
-   * with their values at the start of the Newton step, and they exit
-   * the function with values attained after applying the under-relaxation
-   *
-   * @param nr_res2 (input/output) The residual-squared
-   * @param intnl_old  The internal variables at the previous "time" step
-   * @param intnl (input/output) The internal variables
-   * @param pm (input/output) The plasticity multiplier(s) (consistency parameter(s))
-   * @param E_inv inverse of the elasticity tensor
-   * @param delta_dp (input/output) Change in plastic strain from start of "time" step to current configuration (plastic_strain - plastic_strain_old)
-   * @param dstress Change in stress for a full Newton step
-   * @param dpm Change in plasticity multiplier for a full Newton step
-   * @param dintnl change in internal parameter(s) for a full Newton step
-   * @param f (input/output) Yield function(s).  In this routine, only the active constraints that are not deactivated_due_to_ld are contained in f.
-   * @param epp (input/output) Plastic strain increment constraint
-   * @param ic (input/output) Internal constraint.  In this routine, only the active constraints that are not deactivated_due_to_ld are contained in ic.
-   * @param active The active constraints.
-   * @param deactivated_due_to_ld True if a constraint has temporarily been made deactive due to linear dependence.
-   * @param linesearch_needed (output) True if the full Newton-Raphson step was cut by the linesearch
-   * @return true if successfully found a step that reduces the residual-squared
-   */
-  virtual bool lineSearch(Real & nr_res2, RankTwoTensor & stress, const std::vector<Real> & intnl_old,
-                          std::vector<Real> & intnl, std::vector<Real> & pm, const RankFourTensor & E_inv,
-                          RankTwoTensor & delta_dp, const RankTwoTensor & dstress,
-                          const std::vector<Real> & dpm, const std::vector<Real> & dintnl,
-                          std::vector<Real> & f, RankTwoTensor & epp, std::vector<Real> & ic,
-                          const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld,
-                          bool & linesearch_needed);
-
-
   /**
    * Performs a single Newton-Raphson + linesearch step
    * Constraints are deactivated and the step is re-done if
@@ -250,8 +206,8 @@ protected:
    */
   virtual bool singleStep(Real & nr_res2, RankTwoTensor & stress, const std::vector<Real> & intnl_old,
                           std::vector<Real> & intnl, std::vector<Real> & pm, RankTwoTensor & delta_dp,
-                          const RankFourTensor & E_inv, std::vector<Real> & f,RankTwoTensor & epp,
-                          std::vector<Real> & ic, std::vector<bool> & active,
+                          const RankFourTensor & E_inv, const RankFourTensor & E_ijkl, std::vector<Real> & f,
+                          RankTwoTensor & epp, std::vector<Real> & ic, std::vector<bool> & active,
                           DeactivationSchemeEnum deactivation_scheme,
                           bool & linesearch_needed, bool & ld_encountered);
 
@@ -388,6 +344,8 @@ protected:
    * @param cumulative_pm The plastic multipliers needed for this current Return (this is the sum of the plastic multipliers over all substeps if the strain increment was applied in small substeps)
    */
   RankFourTensor consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm);
+
+  RankFourTensor consistentTangentOpRadial(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm);
 };
 
 #endif //COMPUTEMULTIPLASTICITYSTRESS_H

@@ -127,6 +127,19 @@ protected:
   /// Minimum value of the _f_tol parameters for the Yield Function User Objects
   Real _min_f_tol;
 
+  /// rR pre-sized and/or defined vectors
+  /// might want private
+  std::vector<bool> _act_surf_rR;
+  std::vector<Real> _yf_rR;
+  std::vector<Real> _jac_rR;
+
+  //keep protected -- used in CMPS
+  std::vector<Real> _df_dintnl_rR;
+  std::vector<RankTwoTensor> _df_dstress_rR;
+
+  /// these are for non-rR
+  std::vector<Real> _rhs;
+  std::vector<double> _a;
 
   /**
    * The constraints.  These are set to zero (or <=0 in the case of the yield functions)
@@ -144,6 +157,56 @@ protected:
    */
   virtual void calculateConstraints(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankTwoTensor & delta_dp, std::vector<Real> & f, std::vector<RankTwoTensor> & r, RankTwoTensor & epp, std::vector<Real> & ic, const std::vector<bool> & active);
 
+
+  /**
+   * Performs a line search.  Algorithm is taken straight from
+   * "Numerical Recipes".  Given the changes dstress, dpm and dintnl
+   * provided by the nrStep routine, a line-search looks for an appropriate
+   * under-relaxation that reduces the residual-squared (nr_res2).
+   *
+   * Most variables are input/output variables: they enter the function
+   * with their values at the start of the Newton step, and they exit
+   * the function with values attained after applying the under-relaxation
+   *
+   * @param nr_res2 (input/output) The residual-squared
+   * @param intnl_old  The internal variables at the previous "time" step
+   * @param intnl (input/output) The internal variables
+   * @param pm (input/output) The plasticity multiplier(s) (consistency parameter(s))
+   * @param E_inv inverse of the elasticity tensor
+   * @param delta_dp (input/output) Change in plastic strain from start of "time" step to current configuration (plastic_strain - plastic_strain_old)
+   * @param dstress Change in stress for a full Newton step
+   * @param dpm Change in plasticity multiplier for a full Newton step
+   * @param dintnl change in internal parameter(s) for a full Newton step
+   * @param f (input/output) Yield function(s).  In this routine, only the active constraints that are not deactivated_due_to_ld are contained in f.
+   * @param epp (input/output) Plastic strain increment constraint
+   * @param ic (input/output) Internal constraint.  In this routine, only the active constraints that are not deactivated_due_to_ld are contained in ic.
+   * @param active The active constraints.
+   * @param deactivated_due_to_ld True if a constraint has temporarily been made deactive due to linear dependence.
+   * @param linesearch_needed (output) True if the full Newton-Raphson step was cut by the linesearch
+   * @return true if successfully found a step that reduces the residual-squared
+   */
+  virtual bool lineSearch(Real & nr_res2, RankTwoTensor & stress, const std::vector<Real> & intnl_old,
+                          std::vector<Real> & intnl, std::vector<Real> & pm, const RankFourTensor & E_inv,
+                          RankTwoTensor & delta_dp, const RankTwoTensor & dstress,
+                          const std::vector<Real> & dpm, const std::vector<Real> & dintnl,
+                          std::vector<Real> & f, RankTwoTensor & epp, std::vector<Real> & ic,
+                          const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld,
+                          bool & linesearch_needed, const Real & _epp_tol);
+
+  /**
+   * The residual-squared
+   * @param pm the plastic multipliers for all constraints
+   * @param f the active yield function(s) (not including the ones that are deactivated_due_to_ld)
+   * @param epp the plastic strain increment constraint
+   * @param ic the active internal constraint(s) (not including the ones that are deactivated_due_to_ld)
+   * @param active true if constraint is active
+   * @param deactivated_due_to_ld true if constraint has been temporarily deactivated due to linear dependence of flow directions
+   */
+  virtual Real residual2(const std::vector<Real> & pm, const std::vector<Real> & f,
+                         const RankTwoTensor & epp, const std::vector<Real> & ic,
+                         const std::vector<bool> & active,
+                         const std::vector<bool> & deactivated_due_to_ld,
+                         const Real & _epp_tol);
 
   /**
    * Calculate the RHS which is
@@ -170,6 +233,8 @@ protected:
    */
   virtual void calculateJacobian(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_inv, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<std::vector<Real> > & jac);
 
+  virtual void calculateJacobianRadial(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijlk, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<Real> & df_dintnl, std::vector<RankTwoTensor> & df_dstress, std::vector<Real> & jac, const Real & mu);
+
   /**
    * Performs one Newton-Raphson step.  The purpose here is to find the
    * changes, dstress, dpm and dintnl according to the Newton-Raphson procedure
@@ -186,6 +251,8 @@ protected:
    * @param deactivated_due_to_ld (output) The constraints deactivated due to linear-dependence of the flow directions
    */
   virtual void nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_inv, const RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld);
+
+  virtual void nrStepRadial(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld);
 
 
  private:

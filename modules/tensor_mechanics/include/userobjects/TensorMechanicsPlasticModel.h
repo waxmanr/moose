@@ -50,6 +50,8 @@ class TensorMechanicsPlasticModel : public GeneralUserObject
   /// The number of yield surfaces for this plasticity model
   virtual unsigned int numberSurfaces() const;
 
+  virtual Real yieldStrength(const Real & /*intnl*/) const;
+
   /**
    * Calculates the yield functions.  Note that for single-surface plasticity
    * you don't want to override this - override the private yieldFunction below

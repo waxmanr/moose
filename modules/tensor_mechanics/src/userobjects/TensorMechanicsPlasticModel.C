@@ -41,13 +41,18 @@ TensorMechanicsPlasticModel::numberSurfaces() const
   return 1;
 }
 
-
+Real
+TensorMechanicsPlasticModel::yieldStrength(const Real & /*intnl*/) const
+{
+  return 0.0;
+}
 
 Real
 TensorMechanicsPlasticModel::yieldFunction(const RankTwoTensor & /*stress*/, const Real & /*intnl*/) const
 {
   return 0.0;
 }
+
 void
 TensorMechanicsPlasticModel::yieldFunctionV(const RankTwoTensor & stress, const Real & intnl, std::vector<Real> & f) const
 {
@@ -61,6 +66,7 @@ TensorMechanicsPlasticModel::dyieldFunction_dstress(const RankTwoTensor & /*stre
 {
   return RankTwoTensor();
 }
+
 void
 TensorMechanicsPlasticModel::dyieldFunction_dstressV(const RankTwoTensor & stress, const Real & intnl, std::vector<RankTwoTensor> & df_dstress) const
 {
@@ -170,4 +176,3 @@ TensorMechanicsPlasticModel::modelName() const
 {
   return "None";
 }
-
