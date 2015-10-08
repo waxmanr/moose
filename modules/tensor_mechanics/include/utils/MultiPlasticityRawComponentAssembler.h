@@ -53,6 +53,13 @@ protected:
    */
   unsigned int _num_surfaces;
 
+  /// Number of internal parameters per model
+  /// vector of length (_num_models)
+  std::vector<unsigned int> _ics_given_model;
+
+  /// Total number of internal parameters
+  unsigned int _num_total_ics;
+
   /// Allows initial set of active constraints to be chosen optimally
   MooseEnum _specialIC;
 
@@ -85,7 +92,7 @@ protected:
    * @param active set of active constraints - only the active derivatives are put into "df_dintnl"
    * @param[out] df_dintnl the derivatives.  df_dstress[alpha] = dyieldFunction[alpha]/dintnl[alpha]
    */
-  virtual void dyieldFunction_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<Real> & df_dintnl);
+  virtual void dyieldFunction_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<std::vector<Real> > & df_dintnl);
 
   /**
    * The active flow potential(s) - one for each yield function
@@ -141,8 +148,13 @@ protected:
    * @param intnl vector of internal parameters
    * @param active set of active constraints - only the active derivatives are put into "dh_dintnl"
    * @param[out] dh_dintnl the derivatives.  dh_dintnl[a][alpha][b] = dh[a][alpha]/dintnl[b].  Note that the userobjects assume that there is exactly one internal parameter per yield function, so the derivative is only nonzero for a=alpha=b, so that is all we calculate
-   */
-  virtual void dhardPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<Real> & dh_dintnl);
+   */ // FIX note
+  virtual void dhardPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<std::vector<Real> > & dh_dintnl);
+
+  // derivateive of ics wrt intnls
+  // with one model, one ic --- equals Real of value 1
+  // with multi models and multi ics per model --- equals vector of vector of Reals
+  virtual void dinternalConstraints(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<std::vector<Real> > & dics);
 
   /**
    * Constructs a set of active constraints, given the yield functions, f.

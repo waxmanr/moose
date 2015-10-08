@@ -1237,7 +1237,7 @@ ComputeMultiPlasticityStress::consistentTangentOperator(const RankTwoTensor & st
 
   std::vector<RankTwoTensor> df_dstress;
   dyieldFunction_dstress(stress, intnl, act_vary, df_dstress);
-  std::vector<Real> df_dintnl;
+  std::vector<std::vector<Real> > df_dintnl;
   dyieldFunction_dintnl(stress, intnl, act_vary, df_dintnl);
   std::vector<RankTwoTensor> r;
   flowPotential(stress, intnl, act_vary, r);
@@ -1298,7 +1298,7 @@ ComputeMultiPlasticityStress::consistentTangentOperator(const RankTwoTensor & st
           r2 = df_dstress[ind1]*(E_ijkl*r_minus_stuff[ind2]);
           zzz[ind1*num_currently_active + ind2] += r2(0,0) + r2(1,1) + r2(2,2);
           if (modelNumber(surface1) == modelNumber(surface2))
-            zzz[ind1*num_currently_active + ind2] += df_dintnl[ind1]*h[ind2];
+            zzz[ind1*num_currently_active + ind2] += df_dintnl[ind1]*h[ind2]; // FIX df_dintnl needs second loop & index
           ind2++;
         }
       ind1++;
@@ -1392,4 +1392,3 @@ ComputeMultiPlasticityStress::consistentTangentOperator(const RankTwoTensor & st
 
   return s_inv*strain_coeff;
 }
-

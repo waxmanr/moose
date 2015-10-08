@@ -24,13 +24,13 @@ TensorMechanicsPlasticJ2::TensorMechanicsPlasticJ2(const InputParameters & param
 
 
 Real
-TensorMechanicsPlasticJ2::yieldFunction(const RankTwoTensor & stress, const Real & intnl) const
+TensorMechanicsPlasticJ2::yieldFunction(const RankTwoTensor & stress, const std::vector<Real> & intnl) const
 {
-  return std::pow(3*stress.secondInvariant(), 0.5) - yieldStrength(intnl);
+  return std::pow(3*stress.secondInvariant(), 0.5) - yieldStrength(intnl[0]);
 }
 
 RankTwoTensor
-TensorMechanicsPlasticJ2::dyieldFunction_dstress(const RankTwoTensor & stress, const Real & /*intnl*/) const
+TensorMechanicsPlasticJ2::dyieldFunction_dstress(const RankTwoTensor & stress, const std::vector<Real> & /*intnl*/) const
 {
   Real sII = stress.secondInvariant();
   if (sII == 0.0)
@@ -40,20 +40,22 @@ TensorMechanicsPlasticJ2::dyieldFunction_dstress(const RankTwoTensor & stress, c
 }
 
 
-Real
-TensorMechanicsPlasticJ2::dyieldFunction_dintnl(const RankTwoTensor & /*stress*/, const Real & intnl) const
+std::vector<Real>
+TensorMechanicsPlasticJ2::dyieldFunction_dintnl(const RankTwoTensor & /*stress*/, const std::vector<Real> & intnl) const
 {
-  return -dyieldStrength(intnl);
+  std::vector<Real> dyf_dintnl(1,0);
+  dyf_dintnl[0] = -dyieldStrength(intnl[0]);
+  return dyf_dintnl;
 }
 
 RankTwoTensor
-TensorMechanicsPlasticJ2::flowPotential(const RankTwoTensor & stress, const Real & intnl) const
+TensorMechanicsPlasticJ2::flowPotential(const RankTwoTensor & stress, const std::vector<Real> & intnl) const
 {
   return dyieldFunction_dstress(stress, intnl);
 }
 
 RankFourTensor
-TensorMechanicsPlasticJ2::dflowPotential_dstress(const RankTwoTensor & stress, const Real & /*intnl*/) const
+TensorMechanicsPlasticJ2::dflowPotential_dstress(const RankTwoTensor & stress, const std::vector<Real> & /*intnl*/) const
 {
   Real sII = stress.secondInvariant();
   if (sII == 0)
@@ -71,7 +73,7 @@ TensorMechanicsPlasticJ2::dflowPotential_dstress(const RankTwoTensor & stress, c
 }
 
 RankTwoTensor
-TensorMechanicsPlasticJ2::dflowPotential_dintnl(const RankTwoTensor & /*stress*/, const Real & /*intnl*/) const
+TensorMechanicsPlasticJ2::dflowPotential_dintnl(const RankTwoTensor & /*stress*/, const std::vector<Real> & /*intnl*/) const
 {
   return RankTwoTensor();
 }
@@ -93,4 +95,3 @@ TensorMechanicsPlasticJ2::modelName() const
 {
   return "J2";
 }
-

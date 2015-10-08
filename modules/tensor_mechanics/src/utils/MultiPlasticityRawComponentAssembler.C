@@ -20,6 +20,8 @@ InputParameters validParams<MultiPlasticityRawComponentAssembler>()
 MultiPlasticityRawComponentAssembler::MultiPlasticityRawComponentAssembler(const InputParameters & parameters):
   _num_models(parameters.get<std::vector<UserObjectName> >("plastic_models").size()),
   _num_surfaces(0),
+  _ics_given_model(1,0),
+  _num_total_ics(0),
   _specialIC(parameters.get<MooseEnum>("specialIC"))
 {
   _f.resize(_num_models);
@@ -29,6 +31,13 @@ MultiPlasticityRawComponentAssembler::MultiPlasticityRawComponentAssembler(const
 
   for (unsigned model = 0 ; model < _num_models ; ++model)
     _num_surfaces += _f[model]->numberSurfaces();
+
+  _ics_given_model.resize(_num_models);
+  for (unsigned model = 0; model < _num_models ; ++model)
+  {
+    _ics_given_model[model] = _f[model]->numberICs();
+    _num_total_ics += _ics_given_model[model];
+  }
 
   _model_given_surface.resize(_num_surfaces);
   _model_surface_given_surface.resize(_num_surfaces);
@@ -71,207 +80,301 @@ MultiPlasticityRawComponentAssembler::MultiPlasticityRawComponentAssembler(const
 void
 MultiPlasticityRawComponentAssembler::yieldFunction(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<Real> & f)
 {
-  mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
   mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
 
   f.resize(0);
   std::vector<unsigned int> active_surfaces_of_model;
   std::vector<unsigned int>::iterator active_surface;
   std::vector<Real> model_f;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
   {
     activeModelSurfaces(model, active, active_surfaces_of_model);
     if (active_surfaces_of_model.size() > 0)
     {
-      _f[model]->yieldFunctionV(stress, intnl[model], model_f);
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->yieldFunctionV(stress, model_intnl, model_f);
       for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
         f.push_back(model_f[*active_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
 void
 MultiPlasticityRawComponentAssembler::dyieldFunction_dstress(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<RankTwoTensor> & df_dstress)
 {
-  mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
   mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
 
   df_dstress.resize(0);
   std::vector<unsigned int> active_surfaces_of_model;
   std::vector<unsigned int>::iterator active_surface;
-  std::vector<RankTwoTensor> model_df_dstress;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+  std::vector<RankTwoTensor> model_df_dstress; // FIX --- do these need to be vector<vector<x>> ??? all model_dx_dy values: I think so
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
   {
     activeModelSurfaces(model, active, active_surfaces_of_model);
     if (active_surfaces_of_model.size() > 0)
     {
-      _f[model]->dyieldFunction_dstressV(stress, intnl[model], model_df_dstress);
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->dyieldFunction_dstressV(stress, model_intnl, model_df_dstress);
       for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
         df_dstress.push_back(model_df_dstress[*active_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
 void
-MultiPlasticityRawComponentAssembler::dyieldFunction_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<Real> & df_dintnl)
+MultiPlasticityRawComponentAssembler::dyieldFunction_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<std::vector<Real> > & df_dintnl)
 {
-  mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
   mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
 
   df_dintnl.resize(0);
+  for (i = 0 ; i < 1 ; ++i) // FIX df_dintnl below needs two indices
+    df_dintnl[i].assign(0,0);
   std::vector<unsigned int> active_surfaces_of_model;
   std::vector<unsigned int>::iterator active_surface;
   std::vector<Real> model_df_dintnl;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
   {
     activeModelSurfaces(model, active, active_surfaces_of_model);
     if (active_surfaces_of_model.size() > 0)
     {
-      _f[model]->dyieldFunction_dintnlV(stress, intnl[model], model_df_dintnl);
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->dyieldFunction_dintnlV(stress, model_intnl, model_df_dintnl);
       for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
         df_dintnl.push_back(model_df_dintnl[*active_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
 void
 MultiPlasticityRawComponentAssembler::flowPotential(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<RankTwoTensor> & r)
 {
-  mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
   mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
 
   r.resize(0);
   std::vector<unsigned int> active_surfaces_of_model;
   std::vector<unsigned int>::iterator active_surface;
   std::vector<RankTwoTensor> model_r;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
   {
     activeModelSurfaces(model, active, active_surfaces_of_model);
     if (active_surfaces_of_model.size() > 0)
     {
-      _f[model]->flowPotentialV(stress, intnl[model], model_r);
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->flowPotentialV(stress, model_intnl, model_r);
       for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
         r.push_back(model_r[*active_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
 void
 MultiPlasticityRawComponentAssembler::dflowPotential_dstress(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<RankFourTensor> & dr_dstress)
 {
-  mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
   mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
 
   dr_dstress.resize(0);
   std::vector<unsigned int> active_surfaces_of_model;
   std::vector<unsigned int>::iterator active_surface;
   std::vector<RankFourTensor> model_dr_dstress;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
   {
     activeModelSurfaces(model, active, active_surfaces_of_model);
     if (active_surfaces_of_model.size() > 0)
     {
-      _f[model]->dflowPotential_dstressV(stress, intnl[model], model_dr_dstress);
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->dflowPotential_dstressV(stress, model_intnl, model_dr_dstress);
       for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
         dr_dstress.push_back(model_dr_dstress[*active_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
 void
 MultiPlasticityRawComponentAssembler::dflowPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<RankTwoTensor> & dr_dintnl)
 {
-  mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
   mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
 
   dr_dintnl.resize(0);
   std::vector<unsigned int> active_surfaces_of_model;
   std::vector<unsigned int>::iterator active_surface;
   std::vector<RankTwoTensor> model_dr_dintnl;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
   {
     activeModelSurfaces(model, active, active_surfaces_of_model);
     if (active_surfaces_of_model.size() > 0)
     {
-      _f[model]->dflowPotential_dintnlV(stress, intnl[model], model_dr_dintnl);
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->dflowPotential_dintnlV(stress, model_intnl, model_dr_dintnl);
       for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
         dr_dintnl.push_back(model_dr_dintnl[*active_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
 void
 MultiPlasticityRawComponentAssembler::hardPotential(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<Real> & h)
 {
-  mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
   mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
 
   h.resize(0);
   std::vector<unsigned int> active_surfaces_of_model;
   std::vector<unsigned int>::iterator active_surface;
   std::vector<Real> model_h;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
   {
     activeModelSurfaces(model, active, active_surfaces_of_model);
     if (active_surfaces_of_model.size() > 0)
     {
-      _f[model]->hardPotentialV(stress, intnl[model], model_h);
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->hardPotentialV(stress, model_intnl, model_h);
       for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
         h.push_back(model_h[*active_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
 void
 MultiPlasticityRawComponentAssembler::dhardPotential_dstress(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<RankTwoTensor> & dh_dstress)
 {
-  mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
   mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
 
   dh_dstress.resize(0);
   std::vector<unsigned int> active_surfaces_of_model;
   std::vector<unsigned int>::iterator active_surface;
   std::vector<RankTwoTensor> model_dh_dstress;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
   {
     activeModelSurfaces(model, active, active_surfaces_of_model);
     if (active_surfaces_of_model.size() > 0)
     {
-      _f[model]->dhardPotential_dstressV(stress, intnl[model], model_dh_dstress);
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->dhardPotential_dstressV(stress, model_intnl, model_dh_dstress);
       for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
         dh_dstress.push_back(model_dh_dstress[*active_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
 void
-MultiPlasticityRawComponentAssembler::dhardPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<Real> & dh_dintnl)
+MultiPlasticityRawComponentAssembler::dhardPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<std::vector<Real> > & dh_dintnl)
 {
-  mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
   mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
 
   dh_dintnl.resize(0);
+  for (i = 0 ; i < 1 ; ++i) // FIX dh_dintnl below needs two indices
+    dh_dintnl[i].assign(0,0);
   std::vector<unsigned int> active_surfaces_of_model;
   std::vector<unsigned int>::iterator active_surface;
-  std::vector<Real> model_dh_dintnl;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+  std::vector<std::vector<Real> > model_dh_dintnl;
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
   {
     activeModelSurfaces(model, active, active_surfaces_of_model);
     if (active_surfaces_of_model.size() > 0)
     {
-      _f[model]->dhardPotential_dintnlV(stress, intnl[model], model_dh_dintnl);
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->dhardPotential_dintnlV(stress, model_intnl, model_dh_dintnl);
       for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
         dh_dintnl.push_back(model_dh_dintnl[*active_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
-
 void
+MultiPlasticityRawComponentAssembler::dinternalConstraints(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<std::vector<Real> > & dics)
+{
+  mooseAssert(intnl.size() == _num_total_ics, "Incorrect size of internal parameters");
+  mooseAssert(active.size() == _num_surfaces, "Incorrect size of active");
+
+  dics.resize(0);
+  for (unsigned i = 0 ; i < 1 ; ++i)
+    dics[i].assign(1, 0);
+  std::vector<unsigned int> active_surfaces_of_model;
+  std::vector<unsigned int>::iterator active_surface;
+  std::vector<Real> model_dics;
+  unsigned ic_it = 0, model = 0;
+  while (ic_it < _num_total_ics)
+  {
+    activeModelSurfaces(model, active, active_surfaces_of_model);
+    if (active_surfaces_of_model.size() > 0)
+    {
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
+      _f[model]->dinternalConstraintsV(stress, model_intnl, model_dics);
+      for (active_surface = active_surfaces_of_model.begin() ; active_surface != active_surfaces_of_model.end() ; ++ active_surface)
+        dics.push_back(model_dics[*active_surface][ic_it]); // FIX indexing here; second term can't be right
+    }
+    ic_it += _ics_given_model[model];
+    ++model;
+  }
+  // need to check order dics is populated
+  // looks like: model_dics is 1 x _ics_given_model[model]
+  // then dics is model_dics[model1], model_dics[model2], model_dics[modeln]
+  // should be: (0,1), (0,2), (0,n); (1,0), (2,0), (n,0); (1,2), (1,3), (1,n); (2,1), (3,1), (n,1); etc
+  // first row to n, first column to n, second row to n, second column to n, n row to n, n column to n
+  // n = _num_active_ics
+}
+
+
+void // FIX THIS
 MultiPlasticityRawComponentAssembler::buildActiveConstraints(const std::vector<Real> & f, const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & Eijkl, std::vector<bool> & act)
 {
   mooseAssert(f.size() == _num_surfaces, "buildActiveConstraints called with f.size = " << f.size() << " while there are " << _num_surfaces << " surfaces");
-  mooseAssert(intnl.size() == _num_models, "buildActiveConstraints called with intnl.size = " << intnl.size() << " while there are " << _num_models << " models");
+  mooseAssert(intnl.size() == _num_total_ics, "buildActiveConstraints called with intnl.size = " << intnl.size() << " while there are " << _num_total_ics << " internal parameters");
 
   if (_specialIC == "rock")
     buildActiveConstraintsRock(f, stress, intnl, Eijkl, act);
@@ -281,17 +384,23 @@ MultiPlasticityRawComponentAssembler::buildActiveConstraints(const std::vector<R
   {
     act.resize(0);
     unsigned ind = 0;
-    for (unsigned model = 0 ; model < _num_models ; ++model)
+    unsigned ic_it = 0, model = 0;
+    while (ic_it < _num_total_ics)
     {
+      std::vector<Real> model_intnl(_ics_given_model[model],0.0);
+      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+        model_intnl[i] = intnl[ic_it+i];
       std::vector<Real> model_f(0);
       for (unsigned model_surface = 0 ; model_surface < _f[model]->numberSurfaces() ; ++model_surface)
         model_f.push_back(f[ind++]);
       std::vector<bool> model_act;
       RankTwoTensor returned_stress;
-      _f[model]->activeConstraints(model_f, stress, intnl[model], Eijkl, model_act, returned_stress);
+      _f[model]->activeConstraints(model_f, stress, model_intnl, Eijkl, model_act, returned_stress);
       for (unsigned model_surface = 0 ; model_surface < _f[model]->numberSurfaces() ; ++model_surface)
         act.push_back(model_act[model_surface]);
     }
+    ic_it += _ics_given_model[model];
+    ++model;
   }
 }
 
@@ -308,7 +417,10 @@ MultiPlasticityRawComponentAssembler::buildActiveConstraintsJoint(const std::vec
   // first try tensile alone
   f_single.assign(1, 0);
   f_single[0] = f[0];
-  _f[0]->activeConstraints(f_single, stress, intnl[0], Eijkl, active_tensile, returned_stress);
+  std::vector<Real> model_intnl0, model_intnl1;
+  model_intnl0[0] = intnl[0];
+  model_intnl1[0] = intnl[1];
+  _f[0]->activeConstraints(f_single, stress, model_intnl0, Eijkl, active_tensile, returned_stress);
   _f[1]->yieldFunctionV(returned_stress, intnl[1], f_single);
   if (f_single[0] <= _f[1]->_f_tol)
   {
@@ -319,7 +431,7 @@ MultiPlasticityRawComponentAssembler::buildActiveConstraintsJoint(const std::vec
   // next try shear alone
   f_single.assign(1, 0);
   f_single[0] = f[1];
-  _f[1]->activeConstraints(f_single, stress, intnl[1], Eijkl, active_shear, returned_stress);
+  _f[1]->activeConstraints(f_single, stress, model_intnl1, Eijkl, active_shear, returned_stress);
   _f[0]->yieldFunctionV(returned_stress, intnl[0], f_single);
   if (f_single[0] <= _f[0]->_f_tol)
   {
@@ -348,7 +460,10 @@ MultiPlasticityRawComponentAssembler::buildActiveConstraintsRock(const std::vect
   f_single[0] = f[0];
   f_single[1] = f[1];
   f_single[2] = f[2];
-  _f[0]->activeConstraints(f_single, stress, intnl[0], Eijkl, active_tensile, returned_stress);
+  std::vector<Real> model_intnl0, model_intnl1;
+  model_intnl0[0] = intnl[0];
+  model_intnl1[0] = intnl[1];
+  _f[0]->activeConstraints(f_single, stress, model_intnl0, Eijkl, active_tensile, returned_stress);
   _f[1]->yieldFunctionV(returned_stress, intnl[1], f_single);
   if (f_single[0] <= _f[1]->_f_tol && f_single[1] <= _f[1]->_f_tol && f_single[2] <= _f[1]->_f_tol && f_single[3] <= _f[1]->_f_tol && f_single[4] <= _f[1]->_f_tol && f_single[5] <= _f[1]->_f_tol)
   {
@@ -366,7 +481,7 @@ MultiPlasticityRawComponentAssembler::buildActiveConstraintsRock(const std::vect
   f_single[3] = f[6];
   f_single[4] = f[7];
   f_single[5] = f[8];
-  _f[1]->activeConstraints(f_single, stress, intnl[1], Eijkl, active_MC, returned_stress);
+  _f[1]->activeConstraints(f_single, stress, model_intnl1, Eijkl, active_MC, returned_stress);
   _f[0]->yieldFunctionV(returned_stress, intnl[0], f_single);
   if (f_single[0] <= _f[0]->_f_tol && f_single[1] <= _f[0]->_f_tol && f_single[2] <= _f[0]->_f_tol)
   {
