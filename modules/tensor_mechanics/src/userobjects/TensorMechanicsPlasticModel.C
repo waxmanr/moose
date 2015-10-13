@@ -42,12 +42,6 @@ TensorMechanicsPlasticModel::numberSurfaces() const
 }
 
 Real
-TensorMechanicsPlasticModel::yieldStrength(const Real & /*intnl*/) const
-{
-  return 0.0;
-}
-
-Real
 TensorMechanicsPlasticModel::yieldFunction(const RankTwoTensor & /*stress*/, const Real & /*intnl*/) const
 {
   return 0.0;
@@ -175,4 +169,18 @@ std::string
 TensorMechanicsPlasticModel::modelName() const
 {
   return "None";
+}
+
+void
+TensorMechanicsPlasticModel::nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld) const
+{}
+
+void // probably not needed in base class, as calcJac is called within nrStep
+TensorMechanicsPlasticModel::calculateJacobian(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijlk, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<Real> & df_dintnl, std::vector<RankTwoTensor> & df_dstress, std::vector<Real> & jac, const Real & mu) const
+{}
+
+RankFourTensor
+TensorMechanicsPlasticModel::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm) const
+{
+  return RankFourTensor();
 }

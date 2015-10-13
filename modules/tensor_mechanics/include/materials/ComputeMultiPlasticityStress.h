@@ -55,12 +55,6 @@ protected:
   /// this will eventually disappear --- just here to toggle for time comparison
   bool _radial_return_tan;
 
-  /// rR pre-sized and/or defined vectors
-  /// might want private
-  std::vector<bool> _act_vary_rR;
-  RankTwoTensor _iden;
-  RankFourTensor _iden4;
-
   /// The type of tangent operator to return.  tangent operator = d(stress_rate)/d(strain_rate).
   enum TangentOperatorEnum {
     elastic, linear, nonlinear
@@ -405,7 +399,6 @@ protected:
    */
   RankFourTensor consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm);
 
-  RankFourTensor consistentTangentOpRadial(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm);
 };
 
 #endif //COMPUTEMULTIPLASTICITYSTRESS_H

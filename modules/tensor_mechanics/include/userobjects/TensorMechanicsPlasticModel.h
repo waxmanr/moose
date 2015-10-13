@@ -50,8 +50,6 @@ class TensorMechanicsPlasticModel : public GeneralUserObject
   /// The number of yield surfaces for this plasticity model
   virtual unsigned int numberSurfaces() const;
 
-  virtual Real yieldStrength(const Real & /*intnl*/) const;
-
   /**
    * Calculates the yield functions.  Note that for single-surface plasticity
    * you don't want to override this - override the private yieldFunction below
@@ -150,6 +148,12 @@ class TensorMechanicsPlasticModel : public GeneralUserObject
 
   /// Tolerance on internal constraint
   Real _ic_tol;
+
+  virtual void nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld) const;
+
+  virtual void calculateJacobian(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijlk, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<Real> & df_dintnl, std::vector<RankTwoTensor> & df_dstress, std::vector<Real> & jac, const Real & mu) const;
+
+  virtual RankFourTensor consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm) const;
 
 
  protected:
