@@ -127,16 +127,6 @@ protected:
   /// Minimum value of the _f_tol parameters for the Yield Function User Objects
   Real _min_f_tol;
 
-  /// rR pre-sized and/or defined vectors
-  /// might want private
-  std::vector<bool> _act_surf_rR;
-  std::vector<Real> _yf_rR;
-  std::vector<Real> _jac_rR;
-
-  //keep protected -- used in CMPS
-  std::vector<Real> _df_dintnl_rR;
-  std::vector<RankTwoTensor> _df_dstress_rR;
-
   /// these are for non-rR
   std::vector<Real> _rhs;
   std::vector<double> _a;
@@ -233,8 +223,6 @@ protected:
    */
   virtual void calculateJacobian(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_inv, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<std::vector<Real> > & jac);
 
-  virtual void calculateJacobianRadial(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijlk, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<Real> & df_dintnl, std::vector<RankTwoTensor> & df_dstress, std::vector<Real> & jac, const Real & mu);
-
   /**
    * Performs one Newton-Raphson step.  The purpose here is to find the
    * changes, dstress, dpm and dintnl according to the Newton-Raphson procedure
@@ -251,9 +239,6 @@ protected:
    * @param deactivated_due_to_ld (output) The constraints deactivated due to linear-dependence of the flow directions
    */
   virtual void nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_inv, const RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld);
-
-  virtual void nrStepRadial(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld);
-
 
  private:
 

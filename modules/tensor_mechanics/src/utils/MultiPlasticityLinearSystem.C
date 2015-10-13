@@ -24,11 +24,6 @@ MultiPlasticityLinearSystem::MultiPlasticityLinearSystem(const InputParameters &
     MultiPlasticityRawComponentAssembler(parameters),
     _svd_tol(parameters.get<Real>("linear_dependent")),
     _min_f_tol(-1.0),
-    _act_surf_rR(1,true),
-    _yf_rR(1,0),
-    _jac_rR(1,0),
-    _df_dintnl_rR(1,0),
-    _df_dstress_rR(1),
     _rhs(100,0.0),
     _a(200,0.0)
 {
@@ -772,36 +767,4 @@ MultiPlasticityLinearSystem::nrStep(const RankTwoTensor & stress, const std::vec
       dintnl[model] = _rhs[ind++];
 
   mooseAssert(static_cast<int>(ind) == system_size, "Incorrect extracting of changes from NR solution in nrStep");
-}
-
-void
-MultiPlasticityLinearSystem::nrStepRadial(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld)
-{
-  // Calculate yield function and Jacobian (jac is scalar in this case)
-  yieldFunction(stress, intnl, active, _yf_rR);
-
-  Real mu = E_ijkl(0,1,0,1);
-
-  calculateJacobianRadial(stress, intnl, pm, E_ijkl, active, deactivated_due_to_ld, _df_dintnl_rR, _df_dstress_rR, _jac_rR, mu);
-
-  dpm.assign(_num_surfaces, 0);
-  dpm[0] = _yf_rR[0] / _jac_rR[0];
-  //dpm = f / (3*mu - df_dintnl);
-
-  dstress = -2 * mu * dpm[0] * _df_dstress_rR[0];
-  dintnl.assign(_num_models, 0);
-  dintnl[0] = dpm[0]; // only internal variable is hardening; q1 = pm
-}
-
-void
-MultiPlasticityLinearSystem::calculateJacobianRadial(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijlk, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<Real> & df_dintnl, std::vector<RankTwoTensor> & df_dstress, std::vector<Real> & jac, const Real & mu)
-{
-  // plastic modulus H = -df/dq = -df_dintnl
-  // needed to calc dpm in nrStepRadial()
-  dyieldFunction_dintnl(stress, intnl, _act_surf_rR, _df_dintnl_rR);
-
-  // df/dstress = sqrt(3/2) * n_hat
-  dyieldFunction_dstress(stress, intnl, _act_surf_rR, _df_dstress_rR);
-
-  _jac_rR[0] = 3*mu - _df_dintnl_rR[0];
 }

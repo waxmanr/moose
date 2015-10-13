@@ -41,9 +41,6 @@ ComputeMultiPlasticityStress::ComputeMultiPlasticityStress(const InputParameters
     _ignore_failures(getParam<bool>("ignore_failures")),
     _radial_return(getParam<bool>("radial_return")),
     _radial_return_tan(getParam<bool>("radial_return_tan")),
-    _act_vary_rR(1,true),
-    _iden(RankTwoTensor::initIdentity),
-    _iden4(RankFourTensor::initIdentitySymmetricFour),
 
     _tangent_operator_type((TangentOperatorEnum)(int)getParam<MooseEnum>("tangent_operator")),
 
@@ -681,21 +678,15 @@ ComputeMultiPlasticityStress::returnMap(const RankTwoTensor & stress_old, RankTw
 
     if (final_step)
     {
-      if (_radial_return_tan)
-        consistent_tangent_operator = consistentTangentOpRadial(stress, intnl, E_ijkl, pm, cumulative_pm);
-      else // if (!_radial_return)
-        consistent_tangent_operator = consistentTangentOperator(stress, intnl, E_ijkl, pm, cumulative_pm);
-
-      //std::cout << "Consitent tangent operator: ";
-      //std::cout << consistent_tangent_operator(0,0,0,0) << std::endl;
-      /*for (unsigned int i = 0 ; i < 3 ; ++i)
+      if (_tangent_operator_type == elastic)
+        consistent_tangent_operator = E_ijkl;
+      else
       {
-        for (unsigned int j = 0 ; j < 3 ; ++j)
-          for (unsigned int k = 0 ; k < 3 ; ++k)
-            for (unsigned int l = 0 ; l < 3 ; ++l)
-              std::cout << consistent_tangent_operator(i,j,k,l);
-        std::cout << std::endl;
-      }*/
+        if (_num_models == 1 && _f[0]->modelName() == "J2") // again will fix to be more general
+          consistent_tangent_operator = _f[0]->consistentTangentOperator(stress, intnl, E_ijkl, pm, cumulative_pm);
+        else
+          consistent_tangent_operator = consistentTangentOperator(stress, intnl, E_ijkl, pm, cumulative_pm);
+      }
     }
 
 
@@ -837,41 +828,10 @@ ComputeMultiPlasticityStress::singleStep(Real & nr_res2,
 
   while (constraints_changing)
   {
-    if (_radial_return)
-    {
-      // Perform checks to make sure:
-      // model = j2 (num_models = 1, num_surfaces = 1)
-      // elasticity tensor = symmetric & isotropic
-      if (_num_surfaces > 1)
-        mooseError("Number of surfaces should be one, but is instead " << _num_surfaces);
-      if (_num_models > 1 || _f.size() > 1)
-        mooseError("Number of models should be one, but is instead " << _num_models);
-      if (_num_surfaces != _num_models)
-        mooseError("Number of surfaces should equal number of models.");
-      if (_f[0]->modelName() != "J2") // this error works
-        mooseError("Radial return mapping is only valid with J2 plasticity. Your model is " << _f[0]->modelName());
-
-        // below doesn't seem to be working
-    /*unsigned int N = 3; // 3x3x3x3 R4T
-      for (unsigned int i = 0; i < N; ++i)
-        for (unsigned int j = 0; j < N; ++j)
-          for (unsigned int k = 0; k < N; ++k)
-            for (unsigned int l = 0; l < N; ++l)
-            {
-              if (E_ijkl(i,j,k,l) != E_ijkl(k,l,i,j))
-              mooseError("Elasticity tensor must be symmetric, with E_ijkl = E_klij");
-            }
-      if (E_ijkl(0,0,0,0) != E_ijkl(1,1,1,1) || E_ijkl(1,1,1,1) != E_ijkl(2,2,2,2))
-        mooseError("Elasticity tensor must be isotropic, with E(0,0,0,0) = E(1,1,1,1) = E(2,2,2,2)");
-      if (E_ijkl(0,1,0,1) != E_ijkl(1,0,1,0) || E_ijkl(0,1,0,1) != E_ijkl(1,0,0,1) || E_ijkl(1,0,0,1) != E_ijkl(0,1,1,0))
-        mooseError("Elasticity tensor must be isotropic, with E(0,1,0,1) = E(1,0,1,0) = E(1,0,0,1) = E(0,1,1,0)");
-        */
-
-      // calculate dstress, dpm and dintnl for one full Newton-Raphson step using radial return map
-      nrStepRadial(stress, intnl_old, intnl, pm, E_ijkl, delta_dp, dstress, dpm, dintnl, active, deact_ld);
-    }
-    // calculate dstress, dpm and dintnl for one full Newton-Raphson step using general return map
-    else // if (!_radial_return)
+    // calculate dstress, dpm and dintnl for one full Newton-Raphson step using radial return map
+    if (_num_models == 1 && _f[0]->modelName() == "J2") // will fix to be more general but just _num_models == 1 isn't sufficient
+      _f[0]->nrStep(stress, intnl_old, intnl, pm, E_ijkl, delta_dp, dstress, dpm, dintnl, active, deact_ld);
+    else
       nrStep(stress, intnl_old, intnl, pm, E_inv, delta_dp, dstress, dpm, dintnl, active, deact_ld);
 
     for (unsigned surface = 0 ; surface < deact_ld.size() ; ++surface)
@@ -1122,9 +1082,6 @@ RankFourTensor
 ComputeMultiPlasticityStress::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm)
 {
 
-  if (_tangent_operator_type == elastic)
-    return E_ijkl;
-
   // Typically act_at_some_step = act, but it is possible
   // that when subdividing a strain increment, a surface
   // is only active for one sub-step
@@ -1297,48 +1254,4 @@ ComputeMultiPlasticityStress::consistentTangentOperator(const RankTwoTensor & st
   }
 
   return s_inv*strain_coeff;
-}
-
-RankFourTensor
-ComputeMultiPlasticityStress::consistentTangentOpRadial(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm)
-{
-
-  if (_tangent_operator_type == elastic)
-    return E_ijkl;
-
-  Real mu = E_ijkl(0,1,0,1);
-  Real le = E_ijkl(1,1,0,0);
-  Real K = le + (2.0*mu)/3.0; // bulk modulus, Hooke's law
-
-  // plastic modulus H = -df/dq = -df_dintnl
-  dyieldFunction_dintnl(stress, intnl, _act_vary_rR, _df_dintnl_rR);
-
-  // df/dstress = sqrt(3/2) * n_hat
-  dyieldFunction_dstress(stress, intnl, _act_vary_rR, _df_dstress_rR);
-
-  Real gamma = 1.0/(1.0 - (_df_dintnl_rR[0]/(3.0*mu)));
-  RankTwoTensor n_hat = (-_df_dstress_rR[0]) / (std::sqrt(1.5));
-
-  RankFourTensor iden2 = _iden.outerProduct(_iden);
-
-  RankFourTensor iden_dev = _iden4 - ((1.0/3.0) * iden2);
-
-  RankFourTensor n_hat2 = n_hat.outerProduct(n_hat);
-
-  // need to calculate stress_dev in order to get effective_trial_stress
-  RankTwoTensor dev_trial_stress(stress);
-  dev_trial_stress.addIa(-dev_trial_stress.trace()/3.0);
-
-  // compute effective trial stress = sqrt ( 3/2 s_dev : s_dev)
-  Real dts_squared = dev_trial_stress.doubleContraction(dev_trial_stress);
-  Real eff_trial_stress = std::sqrt(1.5 * dts_squared);
-
-  //std::cout << "Yield strength: " << _f[0]->yieldStrength(intnl[0]) << std::endl;
-
-  Real beta = _f[0]->yieldStrength(intnl[0]) / eff_trial_stress;
-
-  Real gamma_bar = gamma - (1.0 - beta);
-
-  // consistent tangent operator for radial return map case
-  return K * iden2 + 2.0*mu*beta * iden_dev - 2.0*mu*gamma_bar * n_hat2;
 }
