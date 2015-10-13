@@ -235,7 +235,7 @@ MultiPlasticityLinearSystem::calculateConstraints(const RankTwoTensor & stress, 
     if (active_surfaces.size() > 0)
     {
       // some surfaces are active in this model, so must form an internal constraint
-      for (i = 0; i < _ics_given_model[model] ; ++i)
+      for (unsigned i = 0; i < _ics_given_model[model] ; ++i)
         ic.push_back(intnl[ic_it+i] - intnl_old[ic_it+i]);
       for (active_surface = active_surfaces.begin() ; active_surface != active_surfaces.end() ; ++active_surface)
         ic[ic.size()-1] += pm[*active_surface]*h[ind++]; // we know the correct one is h[ind] since it was constructed in the same manner
@@ -283,7 +283,7 @@ MultiPlasticityLinearSystem::calculateRHS(const RankTwoTensor & stress, const st
   for (unsigned model = 0 ; model < _num_models ; ++model)
     if (anyActiveSurfaces(model, active_not_deact))
     {
-      for (i = 0 ; i < _ics_given_model[model] ; ++i)
+      for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
         num_active_ic++;
     }
 
@@ -305,13 +305,13 @@ MultiPlasticityLinearSystem::calculateRHS(const RankTwoTensor & stress, const st
         rhs[ind++] = -f[active_surface];
       active_surface++;
     }
-  unsigned active_model = 0; // FIX --- will have to add for multi ic per model
+  unsigned active_model = 0;
   for (unsigned model = 0 ; model < _num_models ; ++model)
     if (anyActiveSurfaces(model, active))
     {
       if (anyActiveSurfaces(model, active_not_deact))
       {
-        for (i = 0 ; i < _ics_given_model[model] ; ++i)
+        for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
           rhs[ind++] = -ic[active_model+i];
       }
       active_model++;
@@ -369,7 +369,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
   std::vector<RankTwoTensor> df_dstress;
   dyieldFunction_dstress(stress, intnl, active_surface, df_dstress);
 
-  std::vector<Real> df_dintnl;
+  std::vector<std::vector<Real> > df_dintnl;
   dyieldFunction_dintnl(stress, intnl, active_surface, df_dintnl);
 
   std::vector<RankTwoTensor> r;
@@ -378,7 +378,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
   std::vector<RankFourTensor> dr_dstress;
   dflowPotential_dstress(stress, intnl, active, dr_dstress);
 
-  std::vector<RankTwoTensor> dr_dintnl;
+  std::vector<std::vector<RankTwoTensor> > dr_dintnl;
   dflowPotential_dintnl(stress, intnl, active, dr_dintnl);
 
   std::vector<Real> h;
@@ -397,7 +397,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
 
 
   // d(epp)/dstress = sum_{active alpha} pm[alpha]*dr_dstress
-  RankFourTensor depp_dstress; // 6x6
+  RankFourTensor depp_dstress; // 6x6, no change
   ind = 0;
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
     if (active[surface]) // includes deactivated_due_to_ld
@@ -405,7 +405,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
   depp_dstress += E_inv;
 
   // d(epp)/dpm_{active_surface_index} = r_{active_surface_index}
-  std::vector<RankTwoTensor> depp_dpm; // 6x1
+  std::vector<RankTwoTensor> depp_dpm; // 6x1, no change
   depp_dpm.resize(num_active_surface);
   ind = 0;
   active_surface_ind = 0;
@@ -420,8 +420,8 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
   }
 
   // d(epp)/dintnl_{active_model_index} = sum(pm[asdf]*dr_dintnl[fdsa])
-  std::vector<RankTwoTensor> depp_dintnl; // now 6 x n --- still need to FIX
-  depp_dintnl.assign(num_active_model, RankTwoTensor());
+  std::vector<RankTwoTensor> depp_dintnl; // always been R2T x n //
+  depp_dintnl.assign(num_active_ics, RankTwoTensor());
   ind = 0;
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
   {
@@ -430,10 +430,10 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
       unsigned int model_num = modelNumber(surface);
       if (active_model[model_num]) // only include models with surfaces which are still active after deactivated_due_to_ld
         {
-          for (i = 0 ; i < _ics_given_model[model_num] ; ++i)
-            depp_dintnl[active_model_index[model_num]+i] += pm[surface]*dr_dintnl[ind];
+          for (unsigned i = 0 ; i < _ics_given_model[model_num] ; ++i)
+            depp_dintnl[active_model_index[model_num]+i] += pm[surface]*dr_dintnl[surface][ind+i];
         }
-      ind++;
+      ind += _ics_given_model[model_num];
     }
   }
 
@@ -442,7 +442,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
   // df_dpm is always zero
   // df_dintnl has been calculated above, but only the active_surface+active_model stuff needs to be included in Jacobian: see below
 
-  std::vector<RankTwoTensor> dic_dstress; // now n x 6 --- FIX
+  std::vector<RankTwoTensor> dic_dstress; // always been n x R2T
   dic_dstress.assign(num_active_model, RankTwoTensor());
   ind = 0;
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
@@ -452,7 +452,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
       unsigned int model_num = modelNumber(surface);
       if (active_model[model_num]) // only include ic for models with active_surface (ie, if model only contains deactivated_due_to_ld don't include it)
         {
-          for (i = 0 ; i < _ics_given_model[model_num] ; ++i)
+          for (unsigned i = 0 ; i < _ics_given_model[model_num] ; ++i)
             dic_dstress[active_model_index[model_num]+i] += pm[surface]*dh_dstress[ind];
         }
       ind++;
@@ -460,12 +460,12 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
   }
 
 
-  std::vector<std::vector<Real> > dic_dpm; // now n x 1 --- FIX
+  std::vector<std::vector<Real> > dic_dpm; // always been n models x m surfaces
   dic_dpm.resize(_num_total_ics);
   ind = 0;
   active_surface_ind = 0;
   for (unsigned model = 0 ; model < num_active_model ; ++model)
-    for (i = 0 ; i < _ics_given_model[model] ; ++i)
+    for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
       dic_dpm[model+i].assign(num_active_surface, 0);
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
   {
@@ -475,7 +475,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
       {
         unsigned int model_num = modelNumber(surface);
         // if (active_model[model_num]) // do not need this check as if the surface has active_surface, the model must be deemed active!
-        for (i = 0 ; i < _ics_given_model[model_num] ; ++i)
+        for (unsigned i = 0 ; i < _ics_given_model[model_num] ; ++i)
           dic_dpm[active_model_index[model_num]+i][active_surface_ind] = h[ind];
         active_surface_ind++;
       }
@@ -483,32 +483,22 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
     }
   }
 
-  // 'it' variable is added because active_model_index will not access the right intnl value
-  // ex: three models, to ics each, model 2 is not active
-  // intnl.size() = 6, but third and fourth terms need to be skipped
-  // _num_models = 3, but dic_dintnl is 4x4 not 6x6
-  std::vector<std::vector<Real> > dic_dintnl; //  now n x n // FIX num_active_model != num_models
-  dic_dintnl.resize(num_active_model);
-  unsigned it = 0, index = 0;
-  for (unsigned model = 0 ; model < _num_model ; ++model)
+  std::vector<std::vector<Real> > dic_dintnl; // always n x n
+  dic_dintnl.resize(num_active_ics);
+  for (unsigned model = 0 ; model < _num_models ; ++model)
   {
-    if (!active_model[model])
-    {
-      ++model
-      ++it
-    }
-    for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
-    {
-      dic_dintnl[model-it+i].assign(_ics_given_model[model], 0);
-      if (_ics_given_model[model] > 1)
-      { // FIX -- need to generalise to n ics
-        dic_dintnl[model-it][model-it+i] = dics[index]; //UPPER, by row: (1,1), (1,2), (1,3), (1,4), etc then (2,2), (2,3), (2,4), (2,5), etc
-        dic_dintnl[model-it+i][model-it] = dics[index+i]; //LOWER, by column: (1,1), (2,1), (3,1), (4,1), etc then (2,2), (3,2), (4,2), (5,2), etc
-        ++index;
+    if (active_model[model])
+      for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
+      {
+        dic_dintnl[active_model_index[model]+i].assign(_ics_given_model[model], 0);
+        if (_ics_given_model[model] > 1)
+        {
+          dic_dintnl[active_model_index[model]][active_model_index[model]+i] = dics[active_model_index[model]][active_model_index[model]+i]; //UPPER, by row: (1,1), (1,2), (1,3), (1,4), etc then (2,2), (2,3), (2,4), (2,5), etc
+          dic_dintnl[active_model_index[model]+i][active_model_index[model]] = dics[active_model_index[model]+i][active_model_index[model]]; //LOWER, by column: (1,1), (2,1), (3,1), (4,1), etc then (2,2), (3,2), (4,2), (5,2), etc
+        }
+        dic_dintnl[active_model_index[model]+i][active_model_index[model]+i] = 1; // diag terms (dic1_dintnl1, etc.)
       }
-      dic_dintnl[model-it+i][model-it+i] = 1; // diag terms (dic1_dintnl1, etc.)
     }
-  }
   ind = 0;
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
   {
@@ -517,8 +507,12 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
       unsigned int model_num = modelNumber(surface);
       if (active_model[model_num]) // only the models that contain surfaces that are still active after deactivation_due_to_ld
       {
-        for (i = 0 ; i < _ics_given_model[model_num] ; ++i) // FIX because dh_dintnl is now vec<vec> // look at dic_dintnl loops
-          dic_dintnl[active_model_index[model_num+i]][active_model_index[model_num+i]] += pm[surface]*dh_dintnl[ind];
+        for (unsigned i = 0 ; i < _ics_given_model[model_num] ; ++i)
+        {
+          dic_dintnl[active_model_index[model_num]+i][active_model_index[model_num]] += pm[surface]*dh_dintnl[ind+i][ind]; //LOWER
+          dic_dintnl[active_model_index[model_num]][active_model_index[model_num]+i] += pm[surface]*dh_dintnl[ind][ind+i]; //UPPER
+          // are the off diag the same/ sym for this part? FIX
+        }
       }
       ind++;
     }
@@ -542,7 +536,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
           jac[col_num][row_num++] = depp_dstress(i, j, k, l) + (k != l ? depp_dstress(i, j, l, k) : 0); // extra part is needed because i assume dstress(i, j) = dstress(j, i)
       for (unsigned surface = 0 ; surface < num_active_surface ; ++surface)
         jac[col_num][row_num++] = depp_dpm[surface](i, j);
-      for (unsigned a = 0 ; a < num_active_model ; ++a) // same issue with active models vs active ics, etc FIX
+      for (unsigned a = 0 ; a < num_active_model ; ++a)
         jac[col_num][row_num++] = depp_dintnl[a](i, j);
       row_num = 0;
       col_num++;
@@ -559,9 +553,10 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
         jac[col_num][row_num++] = 0; // df_dpm
       for (unsigned model = 0 ; model < _num_models ; ++model)
         if (active_model[model]) // only use df_dintnl for models in active_model
-        { // same issue with active models vs ics, etc FIX
+        {
           if (modelNumber(surface) == model)
-            jac[col_num][row_num++] = df_dintnl[ind]; // df_dintnl is vec<vec> now // two loops & indices
+            for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
+              jac[col_num][row_num++] = df_dintnl[ind][ind+i]; // bc only second index loops through intnl
           else
             jac[col_num][row_num++] = 0;
         }
@@ -577,7 +572,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
         jac[col_num][row_num++] = dic_dstress[a](k, l) + (k != l ? dic_dstress[a](l, k) : 0); // extra part is needed because i assume dstress(i, j) = dstress(j, i)
     for (unsigned alpha = 0 ; alpha < num_active_ics ; ++alpha)
       jac[col_num][row_num++] = dic_dpm[a][alpha];
-    for (unsigned b = 0 ; b < _num_active_ics ; ++b)
+    for (unsigned b = 0 ; b < num_active_ics ; ++b)
       jac[col_num][row_num++] = dic_dintnl[a][b];
     row_num = 0;
     col_num++;
@@ -639,7 +634,7 @@ MultiPlasticityLinearSystem::nrStep(const RankTwoTensor & stress, const std::vec
   {
     if (anyActiveSurfaces(model, active_not_deact))
     {
-      for (unsigned i = 0; i < ics_given_model[model] ; ++i)
+      for (unsigned i = 0; i < _ics_given_model[model] ; ++i)
         dintnl[ic_it+i] = rhs[ind++];
     }
     ic_it += _ics_given_model[model];

@@ -53,6 +53,16 @@ protected:
    */
   unsigned int _num_surfaces;
 
+  /// moved next three from private so debugger class can access
+  /// given a surface number, this returns the model number
+  std::vector<unsigned int> _model_given_surface;
+
+  /// given a surface number, this returns the corresponding-model's internal surface number
+  std::vector<unsigned int> _model_surface_given_surface;
+
+  /// _surfaces_given_model[model_number] = vector of surface numbers for this model
+  std::vector<std::vector<unsigned int> > _surfaces_given_model;
+
   /// Number of internal parameters per model
   /// vector of length (_num_models)
   std::vector<unsigned int> _ics_given_model;
@@ -120,7 +130,7 @@ protected:
    * @param active set of active constraints - only the active derivatives are put into "dr_dintnl"
    * @param[out] dr_dintnl the derivatives.  dr_dintnl[alpha](i, j) = dr[alpha](i, j)/dintnl[alpha]
    */
-  virtual void dflowPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<RankTwoTensor> & dr_dintnl);
+  virtual void dflowPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<bool> & active, std::vector<std::vector<RankTwoTensor> > & dr_dintnl);
 
   /**
    * The active hardening potentials (one for each internal parameter and for each yield function)
@@ -193,15 +203,6 @@ protected:
   void activeSurfaces(int model, const std::vector<bool> & active, std::vector<unsigned int> & active_surfaces);
 
  private:
-
-  /// given a surface number, this returns the model number
-  std::vector<unsigned int> _model_given_surface;
-
-  /// given a surface number, this returns the corresponding-model's internal surface number
-  std::vector<unsigned int> _model_surface_given_surface;
-
-  /// _surfaces_given_model[model_number] = vector of surface numbers for this model
-  std::vector<std::vector<unsigned int> > _surfaces_given_model;
 
   /**
    * "Rock" version

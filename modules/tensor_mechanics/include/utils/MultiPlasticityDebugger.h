@@ -89,7 +89,7 @@ public:
    * @param intnl vector of internal parameters
    * @param[out] df_dintnl the derivative (or derivatives in the case of multisurface plasticity).  df_dintnl[alpha] = dyieldFunction[alpha]/dintnl[alpha]
    */
-  void fddyieldFunction_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<Real> & df_dintnl);
+  void fddyieldFunction_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<std::vector<Real> > & df_dintnl);
 
   /**
    * The finite-difference derivative of the flow potential(s) with respect to stress
@@ -105,7 +105,7 @@ public:
    * @param intnl vector of internal parameters
    * @param[out] dr_dintnl the derivatives.  dr_dintnl[alpha](i, j) = dr[alpha](i, j)/dintnl[alpha]
    */
-  virtual void fddflowPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<RankTwoTensor> & dr_dintnl);
+  virtual void fddflowPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<std::vector<RankTwoTensor> > & dr_dintnl);
 
   /**
    * The Jacobian calculated using finite differences.  The output

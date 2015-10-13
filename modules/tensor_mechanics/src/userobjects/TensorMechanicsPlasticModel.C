@@ -78,7 +78,7 @@ std::vector<Real>
 TensorMechanicsPlasticModel::dyieldFunction_dintnl(const RankTwoTensor & /*stress*/, const std::vector<Real> & /*intnl*/) const
 {
   std::vector<Real> dyf_dintnl;
-  for (i = 0; i < numberICs(); ++i)
+  for (unsigned i = 0; i < numberICs(); ++i)
     dyf_dintnl[i] = 0.0;
   return dyf_dintnl;
 }
@@ -115,15 +115,20 @@ TensorMechanicsPlasticModel::dflowPotential_dstressV(const RankTwoTensor & stres
 
 
 
-RankTwoTensor
+std::vector<RankTwoTensor>
 TensorMechanicsPlasticModel::dflowPotential_dintnl(const RankTwoTensor & /*stress*/, const std::vector<Real> & /*intnl*/) const
 {
-  return RankTwoTensor();
+  std::vector<RankTwoTensor> dfl_dintnl;
+  for (unsigned i = 0 ; numberICs() ; ++i)
+    dfl_dintnl[i] = RankTwoTensor();
+  return dfl_dintnl;
 }
 void
-TensorMechanicsPlasticModel::dflowPotential_dintnlV(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<RankTwoTensor> & dr_dintnl) const
+TensorMechanicsPlasticModel::dflowPotential_dintnlV(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<std::vector<RankTwoTensor> > & dr_dintnl) const
 {
-  return dr_dintnl.assign(numberICs(), dflowPotential_dintnl(stress, intnl));
+  dr_dintnl.resize(numberSurfaces());
+  for (unsigned i = 0 ; i < numberSurfaces() ; ++i)
+    dr_dintnl[i] = dflowPotential_dintnl(stress, intnl);
 }
 
 
@@ -157,28 +162,32 @@ std::vector<Real>
 TensorMechanicsPlasticModel::dhardPotential_dintnl(const RankTwoTensor & /*stress*/, const std::vector<Real> & /*intnl*/) const
 {
   std::vector<Real> dhp_dintnl;
-  for (i = 0 ; i < numberICs() ; ++i)
-    dhp[i] = 0.0;
+  for (unsigned i = 0 ; i < numberICs() ; ++i)
+    dhp_dintnl[i] = 0.0;
   return dhp_dintnl;
 }
 void
 TensorMechanicsPlasticModel::dhardPotential_dintnlV(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<std::vector<Real> > & dh_dintnl) const
 {
-  dh_dintnl.resize(numberSurfaces(), dhardPotential_dintnl(stress, intnl));
+  dh_dintnl.resize(numberSurfaces());
+  for (unsigned i = 0 ; i < numberSurfaces() ; ++i)
+    dh_dintnl[i] = dhardPotential_dintnl(stress, intnl);
 }
 
 std::vector<Real>
 TensorMechanicsPlasticModel::dinternalConstraints(const RankTwoTensor & /*stress*/, const std::vector<Real> & /*intnl*/) const
 {
   std::vector<Real> dics_dintnls;
-  for (i = 0; i < numberICs(); ++i)
+  for (unsigned i = 0; i < numberICs(); ++i)
     dics_dintnls[i] = 0.0;
   return dics_dintnls;
 }
 void
 TensorMechanicsPlasticModel::dinternalConstraintsV(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<std::vector<Real> > & dics) const
 {
-  dics.resize(numberICs(), dinternalConstraints(stress, intnl));
+  dics.resize(numberICs());
+  for (unsigned i = 0 ; i < numberICs() ; ++i)
+    dics[i] = dinternalConstraints(stress, intnl);
 }
 
 

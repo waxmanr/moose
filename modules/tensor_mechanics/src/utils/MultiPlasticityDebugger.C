@@ -41,7 +41,7 @@ MultiPlasticityDebugger::outputAndCheckDebugParameters()
   Moose::err << "stress = \n";
   _fspb_debug_stress.print();
 
-  if (_fspb_debug_pm.size() != _num_surfaces || _fspb_debug_intnl.size() != _num_models || _fspb_debug_pm_change.size() != _num_surfaces || _fspb_debug_intnl_change.size() != _num_models)
+  if (_fspb_debug_pm.size() != _num_surfaces || _fspb_debug_intnl.size() != _num_total_ics || _fspb_debug_pm_change.size() != _num_surfaces || _fspb_debug_intnl_change.size() != _num_total_ics)
     mooseError("The debug parameters have the wrong size\n");
 
   Moose::err << "plastic multipliers =\n";
@@ -50,7 +50,8 @@ MultiPlasticityDebugger::outputAndCheckDebugParameters()
 
   Moose::err << "internal parameters =\n";
   for (unsigned model = 0 ; model < _num_models ; ++model)
-    Moose::err << _fspb_debug_intnl[model] << "\n";
+    for (unsigned i = 0 ; i < _num_total_ics ; ++i)
+      Moose::err << _fspb_debug_intnl[model+i] << "\n";
 
   Moose::err << "finite-differencing parameter for stress-changes:\n" << _fspb_debug_stress_change  << "\n";
   Moose::err << "finite-differencing parameter(s) for plastic-multiplier(s):\n";
@@ -58,7 +59,8 @@ MultiPlasticityDebugger::outputAndCheckDebugParameters()
     Moose::err << _fspb_debug_pm_change[surface] << "\n";
   Moose::err << "finite-differencing parameter(s) for internal-parameter(s):\n";
   for (unsigned model = 0 ; model < _num_models ; ++model)
-    Moose::err << _fspb_debug_intnl_change[model] << "\n";
+    for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
+      Moose::err << _fspb_debug_intnl_change[model+i] << "\n";
 }
 
 
@@ -86,17 +88,19 @@ MultiPlasticityDebugger::checkDerivatives()
   }
 
   Moose::err << "\ndyieldFunction_dintnl.\n";
-  std::vector<Real> df_dintnl;
+  std::vector<std::vector<Real> > df_dintnl;
   dyieldFunction_dintnl(_fspb_debug_stress, _fspb_debug_intnl, act, df_dintnl);
   Moose::err << "Coded:\n";
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
-    Moose::err << df_dintnl[surface] << " ";
+    for (unsigned i = 0 ; i < _ics_given_model[_model_given_surface[surface]] ; ++i)
+      Moose::err << df_dintnl[surface][i] << " ";
   Moose::err << "\n";
-  std::vector<Real> fddf_dintnl;
+  std::vector<std::vector<Real> > fddf_dintnl;
   fddyieldFunction_dintnl(_fspb_debug_stress, _fspb_debug_intnl, fddf_dintnl);
   Moose::err << "Finite difference:\n";
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
-    Moose::err << fddf_dintnl[surface] << " ";
+    for (unsigned ics = 0 ; ics < _ics_given_model[_model_given_surface[surface]] ; ++ics)
+      Moose::err << fddf_dintnl[surface][ics] << " ";
   Moose::err << "\n";
 
   Moose::err << "\ndflowPotential_dstress.  Relative L2 norms.\n";
@@ -114,17 +118,20 @@ MultiPlasticityDebugger::checkDerivatives()
   }
 
   Moose::err << "\ndflowPotential_dintnl.  Relative L2 norms.\n";
-  std::vector<RankTwoTensor> dr_dintnl;
-  std::vector<RankTwoTensor> fddr_dintnl;
+  std::vector<std::vector<RankTwoTensor> > dr_dintnl;
+  std::vector<std::vector<RankTwoTensor> > fddr_dintnl;
   dflowPotential_dintnl(_fspb_debug_stress, _fspb_debug_intnl, act, dr_dintnl);
   fddflowPotential_dintnl(_fspb_debug_stress, _fspb_debug_intnl, fddr_dintnl);
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
   {
-    Moose::err << "surface = " << surface << " Relative L2norm = " << 2*(dr_dintnl[surface] - fddr_dintnl[surface]).L2norm()/(dr_dintnl[surface] + fddr_dintnl[surface]).L2norm() << "\n";
+    for (unsigned ics = 0 ; ics < _ics_given_model[_model_given_surface[surface]] ; ++ics)
+      Moose::err << "surface = " << surface << " Relative L2norm = " << 2*(dr_dintnl[surface][ics] - fddr_dintnl[surface][ics]).L2norm()/(dr_dintnl[surface][ics] + fddr_dintnl[surface][ics]).L2norm() << "\n";
     Moose::err << "Coded:\n";
-    dr_dintnl[surface].print();
+    for (unsigned ics = 0 ; ics < _ics_given_model[_model_given_surface[surface]] ; ++ics)
+      dr_dintnl[surface][ics].print();
     Moose::err << "Finite difference:\n";
-    fddr_dintnl[surface].print();
+    for (unsigned ics = 0 ; ics < _ics_given_model[_model_given_surface[surface]] ; ++ics)
+      fddr_dintnl[surface][ics].print();
   }
 
 }
@@ -187,7 +194,7 @@ MultiPlasticityDebugger::fdJacobian(const RankTwoTensor & stress, const std::vec
   std::vector<Real> orig_rhs;
   calculateRHS(stress, intnl_old, intnl, pm, delta_dp, orig_rhs, active, eliminate_ld, deactivated_due_to_ld); // this calculates RHS, and also set deactivated_due_to_ld.  The latter stays fixed for the rest of this routine
 
-  unsigned int whole_system_size = 6 + _num_surfaces + _num_models;
+  unsigned int whole_system_size = 6 + _num_surfaces + _num_total_ics;
   unsigned int system_size = orig_rhs.size(); // will be = whole_system_size if eliminate_ld = false, since all active=true
   jac.resize(system_size);
   for (unsigned row = 0 ; row < system_size ; ++row)
@@ -254,13 +261,14 @@ MultiPlasticityDebugger::fdJacobian(const RankTwoTensor & stress, const std::vec
   std::vector<Real> intnlep;
   intnlep.resize(_num_models);
   for (unsigned model = 0 ; model < _num_models ; ++model)
-    intnlep[model] = intnl[model];
-  for (unsigned model = 0 ; model < _num_models ; ++model)
+    for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
+      intnlep[model+i] = intnl[model+i];
+  for (unsigned ics = 0 ; ics < _num_total_ics ; ++ics)
   {
-    if (!dof_included(6 + _num_surfaces + model, deactivated_due_to_ld))
+    if (!dof_included(6 + _num_surfaces + ics, deactivated_due_to_ld))
       continue;
-    ep = _fspb_debug_intnl_change[model];
-    intnlep[model] += ep;
+    ep = _fspb_debug_intnl_change[ics];
+    intnlep[ics] += ep;
     active.assign(_num_surfaces, true);
     calculateRHS(stress, intnl_old, intnlep, pm, delta_dp, rhs_ep, active, false, deactivated_due_to_ld_ep);
     unsigned row = 0;
@@ -270,7 +278,7 @@ MultiPlasticityDebugger::fdJacobian(const RankTwoTensor & stress, const std::vec
         jac[row][col] = -(rhs_ep[dof] - orig_rhs[row])/ep; // remember jacobian = -d(rhs)/d(something)
         row++;
       }
-    intnlep[model] -= ep;
+    intnlep[ics] -= ep;
     col++;
   }
 }
@@ -354,7 +362,8 @@ MultiPlasticityDebugger::checkSolution(const RankFourTensor & E_inv)
       x[ind++] = dpm[surface];
   for (unsigned model = 0 ; model < _num_models; ++model)
     if (anyActiveSurfaces(model, active_not_deact))
-      x[ind++] = dintnl[model];
+      for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
+        x[ind++] = dintnl[model+i];
 
   mooseAssert(ind == orig_rhs.size(), "Incorrect extracting of changes from NR solution in the finite-difference checking of nrStep");
 
@@ -441,9 +450,11 @@ MultiPlasticityDebugger::fddyieldFunction_dstress(const RankTwoTensor & stress, 
 }
 
 void
-MultiPlasticityDebugger::fddyieldFunction_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<Real> & df_dintnl)
+MultiPlasticityDebugger::fddyieldFunction_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<std::vector<Real> > & df_dintnl)
 {
   df_dintnl.resize(_num_surfaces);
+  for (unsigned i = 0 ; i < _num_surfaces ; ++i)
+    df_dintnl[i].assign(_num_total_ics,0);
 
   std::vector<bool> act;
   act.assign(_num_surfaces, true);
@@ -452,20 +463,23 @@ MultiPlasticityDebugger::fddyieldFunction_dintnl(const RankTwoTensor & stress, c
   yieldFunction(stress, intnl, act, origf);
 
   std::vector<Real> intnlep;
-  intnlep.resize(_num_models);
-  for (unsigned model = 0 ; model < _num_models ; ++model)
-    intnlep[model] = intnl[model];
-  Real ep;
+  intnlep.resize(_num_total_ics);
+  for (unsigned ics = 0 ; ics < _num_total_ics ; ++ics)
+    intnlep[ics] = intnl[ics];
+  std::vector<Real> ep;
   std::vector<Real> fep;
   unsigned int model;
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
   {
     model = modelNumber(surface);
-    ep = _fspb_debug_intnl_change[model];
-    intnlep[model] += ep;
-    yieldFunction(stress, intnlep, act, fep);
-    df_dintnl[surface] = (fep[surface] - origf[surface])/ep;
-    intnlep[model] -= ep;
+    for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
+    {
+      ep[i] = _fspb_debug_intnl_change[model+i];
+      intnlep[model+i] += ep[i];
+      yieldFunction(stress, intnlep, act, fep);
+      df_dintnl[surface][model+i] = (fep[surface] - origf[surface])/ep[i];
+      intnlep[model+i] -= ep[i];
+    }
   }
 }
 
@@ -497,9 +511,11 @@ MultiPlasticityDebugger::fddflowPotential_dstress(const RankTwoTensor & stress, 
 }
 
 void
-MultiPlasticityDebugger::fddflowPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<RankTwoTensor> & dr_dintnl)
+MultiPlasticityDebugger::fddflowPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl, std::vector<std::vector<RankTwoTensor> > & dr_dintnl)
 {
   dr_dintnl.resize(_num_surfaces);
+  for (unsigned i = 0 ; i < 1 ; ++i)
+    dr_dintnl[i].resize(_num_total_ics);
 
   std::vector<bool> act;
   act.assign(_num_surfaces, true);
@@ -509,18 +525,21 @@ MultiPlasticityDebugger::fddflowPotential_dintnl(const RankTwoTensor & stress, c
 
   std::vector<Real> intnlep;
   intnlep.resize(_num_models);
-  for (unsigned model = 0 ; model < _num_models ; ++model)
-    intnlep[model] = intnl[model];
-  Real ep;
+  for (unsigned ics = 0 ; ics < _num_total_ics ; ++ics)
+    intnlep[ics] = intnl[ics];
+  std::vector<Real> ep;
   std::vector<RankTwoTensor> rep;
   unsigned int model;
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
   {
     model = modelNumber(surface);
-    ep = _fspb_debug_intnl_change[model];
-    intnlep[model] += ep;
-    flowPotential(stress, intnlep, act, rep);
-    dr_dintnl[surface] = (rep[surface] - origr[surface])/ep;
-    intnlep[model] -= ep;
+    for (unsigned i = 0 ; i < _ics_given_model[model] ; ++i)
+    {
+      ep[i] = _fspb_debug_intnl_change[model+i];
+      intnlep[model+i] += ep[i];
+      flowPotential(stress, intnlep, act, rep);
+      dr_dintnl[surface][model+i] = (rep[surface] - origr[surface])/ep[i];
+      intnlep[model+i] -= ep[i];
+    }
   }
 }

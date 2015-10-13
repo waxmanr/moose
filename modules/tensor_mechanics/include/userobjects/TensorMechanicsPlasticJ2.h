@@ -77,7 +77,7 @@ class TensorMechanicsPlasticJ2 : public TensorMechanicsPlasticModel
    * @param intnl internal parameter
    * @return dr_dintnl(i, j) = dr(i, j)/dintnl
    */
-  std::vector<RankFourTensor> dflowPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl) const;
+  std::vector<RankTwoTensor> dflowPotential_dintnl(const RankTwoTensor & stress, const std::vector<Real> & intnl) const;
 
   /**
    * YieldStrength.  The yield function is sqrt(3*J2) - yieldStrength.

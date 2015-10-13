@@ -72,10 +72,13 @@ TensorMechanicsPlasticJ2::dflowPotential_dstress(const RankTwoTensor & stress, c
   return dfp;
 }
 
-RankTwoTensor
+std::vector<RankTwoTensor> // not sure why this fcn exists; overrides with same
 TensorMechanicsPlasticJ2::dflowPotential_dintnl(const RankTwoTensor & /*stress*/, const std::vector<Real> & /*intnl*/) const
 {
-  return RankTwoTensor();
+  std::vector<RankTwoTensor> dfl_dintnl;
+  for (unsigned i = 0 ; numberICs() ; ++i)
+    dfl_dintnl[i] = RankTwoTensor();
+  return dfl_dintnl;
 }
 
 Real

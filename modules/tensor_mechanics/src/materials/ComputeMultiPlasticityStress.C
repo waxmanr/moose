@@ -1243,7 +1243,7 @@ ComputeMultiPlasticityStress::consistentTangentOperator(const RankTwoTensor & st
   flowPotential(stress, intnl, act_vary, r);
   std::vector<RankFourTensor> dr_dstress_at_some_step;
   dflowPotential_dstress(stress, intnl, act_at_some_step, dr_dstress_at_some_step);
-  std::vector<RankTwoTensor> dr_dintnl_at_some_step;
+  std::vector<std::vector<RankTwoTensor> > dr_dintnl_at_some_step;
   dflowPotential_dintnl(stress, intnl, act_at_some_step, dr_dintnl_at_some_step);
   std::vector<Real> h;
   hardPotential(stress, intnl, act_vary, h);
@@ -1264,7 +1264,7 @@ ComputeMultiPlasticityStress::consistentTangentOperator(const RankTwoTensor & st
         {
           if (modelNumber(surface1) == modelNumber(surface2))
           {
-            r_minus_stuff.back() -= cumulative_pm[surface2]*dr_dintnl_at_some_step[ind2]*h[ind1];
+            r_minus_stuff.back() -= cumulative_pm[surface2]*dr_dintnl_at_some_step[surface1][ind2]*h[ind1];
           }
           ind2++;
         }
@@ -1298,7 +1298,7 @@ ComputeMultiPlasticityStress::consistentTangentOperator(const RankTwoTensor & st
           r2 = df_dstress[ind1]*(E_ijkl*r_minus_stuff[ind2]);
           zzz[ind1*num_currently_active + ind2] += r2(0,0) + r2(1,1) + r2(2,2);
           if (modelNumber(surface1) == modelNumber(surface2))
-            zzz[ind1*num_currently_active + ind2] += df_dintnl[ind1]*h[ind2]; // FIX df_dintnl needs second loop & index
+              zzz[ind1*num_currently_active + ind2] += df_dintnl[surface1][ind1]*h[ind2]; // picked surf1 because should be same as surf2?
           ind2++;
         }
       ind1++;
