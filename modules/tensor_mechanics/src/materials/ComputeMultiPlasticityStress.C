@@ -214,7 +214,8 @@ ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTw
 
   // the following does the customized returnMap algorithm
   // for all the plastic models.
-  bool successful_return = returnMapAll(stress_old + E_ijkl*strain_increment, intnl_old, E_ijkl, _epp_tol, stress, intnl, delta_dp, yf, num_plastic_returns);
+  unsigned custom_model = 0;
+  bool successful_return = returnMapAll(stress_old + E_ijkl*strain_increment, intnl_old, E_ijkl, _epp_tol, stress, intnl, delta_dp, yf, num_plastic_returns, custom_model);
 
   if (num_plastic_returns == 0)
   {
@@ -234,7 +235,11 @@ ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTw
     // and the other models have signalled they are elastic at
     // the trial stress
     plastic_strain = plastic_strain_old + delta_dp;
-    consistent_tangent_operator = E_ijkl;  // TODO: NEEDS TO BE CHANGED !!!!
+    if (_tangent_operator_type == elastic)
+      consistent_tangent_operator = E_ijkl;
+    else
+      consistent_tangent_operator = _f[custom_model]->consistentTangentOperator(stress, intnl, E_ijkl);
+    //E_ijkl;  // TODO: NEEDS TO BE CHANGED !!!!
     return true;
   }
   else

@@ -198,7 +198,7 @@ TensorMechanicsPlasticModel::calculateJacobian(const RankTwoTensor & stress, con
 {}
 
 RankFourTensor
-TensorMechanicsPlasticModel::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm) const
+TensorMechanicsPlasticModel::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl) const
 {
   return RankFourTensor();
 }

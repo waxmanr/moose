@@ -165,7 +165,7 @@ TensorMechanicsPlasticJ2::calculateJacobian(const RankTwoTensor & stress, const 
 
 
 RankFourTensor
-TensorMechanicsPlasticJ2::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm) const
+TensorMechanicsPlasticJ2::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl) const
 {
 
   Real mu = E_ijkl(0,1,0,1);

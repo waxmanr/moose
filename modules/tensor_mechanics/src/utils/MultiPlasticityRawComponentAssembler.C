@@ -487,7 +487,7 @@ MultiPlasticityRawComponentAssembler::buildActiveConstraintsRock(const std::vect
  *   num_successful_plastic_returns is set appropriately
  */
 bool
-MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_stress, const std::vector<Real> & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & stress, std::vector<Real> & intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & num_successful_plastic_returns)
+MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_stress, const std::vector<Real> & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & stress, std::vector<Real> & intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & num_successful_plastic_returns, unsigned & custom_model)
 {
   mooseAssert(intnl_old.size() == _num_models, "Incorrect size of internal parameters");
   mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
@@ -546,6 +546,9 @@ MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_s
         // model_f from previous models to the_single_plastic_model
         // also i don't set delta_dp = model_delta_dp yet, because
         // i might find problems later on
+        // custom_model usesd to track which model succeeded in custom return map algorithm
+        // used for consistent_tangent_operator in returnMapAll
+        custom_model = model;
         break;
       }
     }

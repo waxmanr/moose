@@ -213,7 +213,7 @@ protected:
    * @param[out] num_successful_plastic_returns will be 0 for (A) and (C), and 1 for (B)
    * @return true in case (A) and (B), and false in case (C)
    */
-  bool returnMapAll(const RankTwoTensor & trial_stress, const std::vector<Real> & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & stress, std::vector<Real> & intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & num_successful_plastic_returns);
+  bool returnMapAll(const RankTwoTensor & trial_stress, const std::vector<Real> & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & stress, std::vector<Real> & intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & num_successful_plastic_returns, unsigned & custom_model);
 
  private:
 
