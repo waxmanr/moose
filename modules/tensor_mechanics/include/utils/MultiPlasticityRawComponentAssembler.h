@@ -180,6 +180,41 @@ protected:
    */
   void activeSurfaces(int model, const std::vector<bool> & active, std::vector<unsigned int> & active_surfaces);
 
+
+  /**
+   * Performs a returnMap for each plastic model using
+   * their inbuilt returnMap functions.  This may be used
+   * to quickly ascertain whether a (trial_stress, intnl_old) configuration
+   * is admissible, or whether a single model's customized returnMap
+   * function can provide a solution to the return-map problem,
+   * or whether a full Newton-Raphson approach such as implemented
+   * in ComputeMultiPlasticityStress is needed.
+   *
+   * There are three cases mentioned below:
+   * (A) The (trial_stress, intnl_old) configuration is admissible
+   *     according to all plastic models
+   * (B) The (trial_stress, intnl_old) configuration is inadmissible
+   *     to exactly one plastic model, and that model can successfully
+   *     use its customized returnMap function to provide a returned
+   *     (stress, intnl) configuration, and that configuration is
+   *     admissible according to all plastic models
+   * (C) All other cases.  This includes customized returnMap
+   *     functions failing, or more than one plastic_model being
+   *     inadmissible, etc
+   *
+   * @param trial_stress the trial stress
+   * @param intnl_old the old values of the internal parameters
+   * @param E_ijkl the elasticity tensor
+   * @param ep_plastic_tolerance the tolerance on the plastic strain
+   * @param[out] stress is set to trial_stress in case (A) or (C), and the returned value of stress in case (B).
+   * @param[out] intnl is set to intnl_old in case (A) or (C), and the returned value of intnl in case (B)
+   * @param[out] delta_dp is unchanged in case (A) or (C), and is set to the change in plastic strain in case(B)
+   * @param[out] yf will contain the yield function values at (stress, intnl)
+   * @param[out] num_successful_plastic_returns will be 0 for (A) and (C), and 1 for (B)
+   * @return true in case (A) and (B), and false in case (C)
+   */
+  bool returnMapAll(const RankTwoTensor & trial_stress, const std::vector<Real> & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & stress, std::vector<Real> & intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & num_successful_plastic_returns);
+
  private:
 
   /// given a surface number, this returns the model number

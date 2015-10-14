@@ -24,8 +24,6 @@ InputParameters validParams<ComputeMultiPlasticityStress>()
   params.addParam<MooseEnum>("deactivation_scheme", deactivation_scheme, "Scheme by which constraints are deactivated.  (NOTE: This is irrelevant if there is only one yield surface.)  safe: return to the yield surface and then deactivate constraints with negative plasticity multipliers.  optimized: deactivate a constraint as soon as its plasticity multiplier becomes negative.  dumb: iteratively try all combinations of active constraints until the solution is found.  You may specify fall-back options.  Eg optimized_to_safe: first use 'optimized', and if that fails, try the return with 'safe'.");
   params.addParam<RealVectorValue>("transverse_direction", "If this parameter is provided, before the return-map algorithm is called a rotation is performed so that the 'z' axis in the new frame lies along the transverse_direction in the original frame.  After returning, the inverse rotation is performed.  The transverse_direction will itself rotate with large strains.  This is so that transversely-isotropic plasticity models may be easily defined in the frame where the isotropy holds in the x-y plane.");
   params.addParam<bool>("ignore_failures", false, "The return-map algorithm will return with the best admissible stresses and internal parameters that it can, even if they don't fully correspond to the applied strain increment.  To speed computations, this flag can be set to true, the max_NR_iterations set small, and the min_stepsize large.");
-  params.addParam<bool>("radial_return", false, "If true, uses radial return mapping for plastic steps.");
-  params.addParam<bool>("radial_return_tan", false, "If true, uses radial return mapping formula for consistent tangent operator for plastic steps.");
   MooseEnum tangent_operator("elastic linear nonlinear", "nonlinear");
   params.addParam<MooseEnum>("tangent_operator", tangent_operator, "Type of tangent operator to return.  'elastic': return the elasticity tensor.  'linear': return the consistent tangent operator that is correct for plasticity with yield functions linear in stress.  'nonlinear': return the full, general consistent tangent operator.  The calculations assume the hardening potentials are independent of stress and hardening parameters.");
   params.addClassDescription("Material for multi-surface finite-strain plasticity");
@@ -39,8 +37,6 @@ ComputeMultiPlasticityStress::ComputeMultiPlasticityStress(const InputParameters
     _min_stepsize(getParam<Real>("min_stepsize")),
     _max_stepsize_for_dumb(getParam<Real>("max_stepsize_for_dumb")),
     _ignore_failures(getParam<bool>("ignore_failures")),
-    _radial_return(getParam<bool>("radial_return")),
-    _radial_return_tan(getParam<bool>("radial_return_tan")),
 
     _tangent_operator_type((TangentOperatorEnum)(int)getParam<MooseEnum>("tangent_operator")),
 
@@ -141,8 +137,8 @@ ComputeMultiPlasticityStress::computeQpStress()
   bool ld_encountered = false;
   bool constraints_added = false;
 
-  // try a purely elastic step first
-  bool found_solution = elasticStep(_stress_old[_qp], _stress[_qp], _intnl_old[_qp], _intnl[_qp], _plastic_strain_old[_qp], _plastic_strain[_qp], _my_elasticity_tensor, _my_strain_increment, _yf[_qp], number_iterations, _Jacobian_mult[_qp]);
+  // try a "quick" return first - this can be purely elastic, or a customised plastic return defined by a TensorMechanicsPlasticXXXX UserObject
+  bool found_solution = quickStep(_stress_old[_qp], _stress[_qp], _intnl_old[_qp], _intnl[_qp], _plastic_strain_old[_qp], _plastic_strain[_qp], _my_elasticity_tensor, _my_strain_increment, _yf[_qp], number_iterations, _Jacobian_mult[_qp]);
 
   // if not purely elastic, do some plastic return
   if (!found_solution)
@@ -209,15 +205,40 @@ ComputeMultiPlasticityStress::postReturnMap()
 }
 
 bool
-ComputeMultiPlasticityStress::elasticStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator)
+ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator)
 {
-  stress = stress_old + E_ijkl*strain_increment;
-  plastic_strain = plastic_strain_old;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
-    intnl[model] = intnl_old[model];
   iterations = 0;
-  consistent_tangent_operator = E_ijkl;
-  return checkAdmissible(stress, intnl, yf);
+
+  unsigned num_plastic_returns;
+  RankTwoTensor delta_dp;
+
+  // the following does the customized returnMap algorithm
+  // for all the plastic models.
+  bool successful_return = returnMapAll(stress_old + E_ijkl*strain_increment, intnl_old, E_ijkl, _epp_tol, stress, intnl, delta_dp, yf, num_plastic_returns);
+
+  if (num_plastic_returns == 0)
+  {
+    // if successful_return = true, then a purely elastic step
+    // if successful_return = false, then >=1 plastic model is in
+    //    inadmissible zone and failed to return using its customized
+    //    returnMap function.
+    // In either case:
+    plastic_strain = plastic_strain_old;
+    if (successful_return)
+      consistent_tangent_operator = E_ijkl;
+    return successful_return;
+  }
+  else if (num_plastic_returns == 1 && successful_return)
+  {
+    // one model has successfully completed its custom returnMap algorithm
+    // and the other models have signalled they are elastic at
+    // the trial stress
+    plastic_strain = plastic_strain_old + delta_dp;
+    consistent_tangent_operator = E_ijkl;  // TODO: NEEDS TO BE CHANGED !!!!
+    return true;
+  }
+  else
+    mooseError("ComputeMultiPlasticityStress::quickStep   should not get here!");
 }
 
 bool
@@ -251,7 +272,6 @@ ComputeMultiPlasticityStress::plasticStep(const RankTwoTensor & stress_old, Rank
   // and internal parameters.
   RankTwoTensor stress_good = stress_old;
   RankTwoTensor plastic_strain_good = plastic_strain_old;
-
   std::vector<Real> intnl_good(_num_models);
   for (unsigned model = 0 ; model < _num_models ; ++model)
     intnl_good[model] = intnl_old[model];
@@ -353,7 +373,7 @@ bool
 ComputeMultiPlasticityStress::returnMap(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & f, unsigned int & iter, const bool & can_revert_to_dumb, bool & linesearch_needed, bool & ld_encountered, bool & constraints_added, const bool & final_step, RankFourTensor & consistent_tangent_operator, std::vector<Real> & cumulative_pm)
 {
 
-  bool successful_return = elasticStep(stress_old, stress, intnl_old, intnl, plastic_strain_old, plastic_strain, E_ijkl, strain_increment, f, iter, consistent_tangent_operator);
+  bool successful_return = quickStep(stress_old, stress, intnl_old, intnl, plastic_strain_old, plastic_strain, E_ijkl, strain_increment, f, iter, consistent_tangent_operator);
 
 
   if (successful_return)
@@ -470,8 +490,6 @@ ComputeMultiPlasticityStress::returnMap(const RankTwoTensor & stress_old, RankTw
 
   successful_return = false;
 
-  //std::cout << "Element: " << _current_elem->id() << " " << _qp << std::endl;
-
   bool still_finding_solution = true;
   while (still_finding_solution)
   {
@@ -480,13 +498,9 @@ ComputeMultiPlasticityStress::returnMap(const RankTwoTensor & stress_old, RankTw
 
     // The Newton-Raphson loops
     while (nr_res2 > 0.5 && local_iter++ < _max_iter && single_step_success)
-    {
-      //std::cout << "Resid before Step: " << nr_res2 << std::endl;
       single_step_success = singleStep(nr_res2, stress, intnl_old, intnl, pm,
-                                       delta_dp, E_inv, E_ijkl, f, epp, ic, act, deact_scheme,
+                                       delta_dp, E_inv, f, epp, ic, act, deact_scheme,
                                        linesearch_needed, ld_encountered);
-      //std::cout << "Resid after Step: " << nr_res2 << std::endl;
-    }
 
     bool nr_good = (nr_res2 <= 0.5 && local_iter <= _max_iter && single_step_success);
 
@@ -677,17 +691,7 @@ ComputeMultiPlasticityStress::returnMap(const RankTwoTensor & stress_old, RankTw
 
 
     if (final_step)
-    {
-      if (_tangent_operator_type == elastic)
-        consistent_tangent_operator = E_ijkl;
-      else
-      {
-        if (_num_models == 1 && _f[0]->modelName() == "J2") // again will fix to be more general
-          consistent_tangent_operator = _f[0]->consistentTangentOperator(stress, intnl, E_ijkl, pm, cumulative_pm);
-        else
-          consistent_tangent_operator = consistentTangentOperator(stress, intnl, E_ijkl, pm, cumulative_pm);
-      }
-    }
+      consistent_tangent_operator = consistentTangentOperator(stress, intnl, E_ijkl, pm, cumulative_pm);
 
 
     if (f.size() != _num_surfaces)
@@ -775,9 +779,7 @@ ComputeMultiPlasticityStress::singleStep(Real & nr_res2,
                                          std::vector<Real> & intnl,
                                          std::vector<Real> & pm,
                                          RankTwoTensor & delta_dp,
-                                         const RankFourTensor & E_inv,
-                                         const RankFourTensor & E_ijkl,
-                                         std::vector<Real> & f,
+                                         const RankFourTensor & E_inv, std::vector<Real> & f,
                                          RankTwoTensor & epp,
                                          std::vector<Real> & ic,
                                          std::vector<bool> & active,
@@ -825,14 +827,10 @@ ComputeMultiPlasticityStress::singleStep(Real & nr_res2,
    */
   bool constraints_changing = true;
   bool reinstated_actives;
-
   while (constraints_changing)
   {
-    // calculate dstress, dpm and dintnl for one full Newton-Raphson step using radial return map
-    if (_num_models == 1 && _f[0]->modelName() == "J2") // will fix to be more general but just _num_models == 1 isn't sufficient
-      _f[0]->nrStep(stress, intnl_old, intnl, pm, E_ijkl, delta_dp, dstress, dpm, dintnl, active, deact_ld);
-    else
-      nrStep(stress, intnl_old, intnl, pm, E_inv, delta_dp, dstress, dpm, dintnl, active, deact_ld);
+    // calculate dstress, dpm and dintnl for one full Newton-Raphson step
+    nrStep(stress, intnl_old, intnl, pm, E_inv, delta_dp, dstress, dpm, dintnl, active, deact_ld);
 
     for (unsigned surface = 0 ; surface < deact_ld.size() ; ++surface)
       if (deact_ld[surface])
@@ -843,7 +841,7 @@ ComputeMultiPlasticityStress::singleStep(Real & nr_res2,
 
     // perform a line search
     // The line-search will exit with updated values
-    successful_step = lineSearch(nr_res2, stress, intnl_old, intnl, pm, E_inv, delta_dp, dstress, dpm, dintnl, f, epp, ic, active, deact_ld, linesearch_needed, _epp_tol);
+    successful_step = lineSearch(nr_res2, stress, intnl_old, intnl, pm, E_inv, delta_dp, dstress, dpm, dintnl, f, epp, ic, active, deact_ld, linesearch_needed);
 
     if (!successful_step)
       // completely bomb out
@@ -914,7 +912,7 @@ ComputeMultiPlasticityStress::singleStep(Real & nr_res2,
       completely_converged = false;
 
     if (!completely_converged)
-      nr_res2 = residual2(pm, f, epp, ic, active, deact_ld, _epp_tol);
+      nr_res2 = residual2(pm, f, epp, ic, active, deact_ld);
   }
 
   return successful_step;
@@ -1020,7 +1018,7 @@ ComputeMultiPlasticityStress::applyKuhnTucker(const std::vector<Real> & f, const
 }
 
 Real
-ComputeMultiPlasticityStress::residual2(const std::vector<Real> & pm, const std::vector<Real> & f, const RankTwoTensor & epp, const std::vector<Real> & ic, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, const Real & _epp_tol)
+ComputeMultiPlasticityStress::residual2(const std::vector<Real> & pm, const std::vector<Real> & f, const RankTwoTensor & epp, const std::vector<Real> & ic, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld)
 {
   Real nr_res2 = 0;
   unsigned ind = 0;
@@ -1067,8 +1065,7 @@ ComputeMultiPlasticityStress::lineSearch(Real & nr_res2,
                                          std::vector<Real> & ic,
                                          const std::vector<bool> & active,
                                          const std::vector<bool> & deactivated_due_to_ld,
-                                         bool & linesearch_needed,
-                                         const Real & _epp_tol)
+                                         bool & linesearch_needed)
 {
   // Line search algorithm straight out of "Numerical Recipes"
 
@@ -1115,7 +1112,7 @@ ComputeMultiPlasticityStress::lineSearch(Real & nr_res2,
     calculateConstraints(ls_stress, intnl_old, ls_intnl, ls_pm, ls_delta_dp, f, r, epp, ic, active);
 
     // calculate the new residual-squared
-    nr_res2 = residual2(ls_pm, f, epp, ic, active, deactivated_due_to_ld, _epp_tol);
+    nr_res2 = residual2(ls_pm, f, epp, ic, active, deactivated_due_to_ld);
 
     if (nr_res2 < f0 + 1E-4*lam*slope)
       break;
@@ -1130,7 +1127,7 @@ ComputeMultiPlasticityStress::lineSearch(Real & nr_res2,
         ls_intnl[a] = intnl[a];
       ls_stress = stress;
       calculateConstraints(ls_stress, intnl_old, ls_intnl, ls_pm, ls_delta_dp, f, r, epp, ic, active);
-      nr_res2 = residual2(ls_pm, f, epp, ic, active, deactivated_due_to_ld, _epp_tol);
+      nr_res2 = residual2(ls_pm, f, epp, ic, active, deactivated_due_to_ld);
       break;
     }
     else if (lam == 1.0)
@@ -1242,6 +1239,9 @@ ComputeMultiPlasticityStress::activeCombinationNumber(const std::vector<bool> & 
 RankFourTensor
 ComputeMultiPlasticityStress::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm)
 {
+
+  if (_tangent_operator_type == elastic)
+    return E_ijkl;
 
   // Typically act_at_some_step = act, but it is possible
   // that when subdividing a strain increment, a surface

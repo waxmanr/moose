@@ -95,6 +95,51 @@ class TensorMechanicsPlasticJ2 : public TensorMechanicsPlasticModel
    RankTwoTensor _iden;
    RankFourTensor _iden4;
 
+  /** 
+   * Performs a custom return-map.
+   * You may choose to over-ride this in your
+   * derived TensorMechanicsPlasticXXXX class,
+   * and you may implement the return-map
+   * algorithm in any way that suits you.  Eg, using
+   * a Newton-Raphson approach, or a radial-return,
+   * etc.
+   * This may also be used as a quick way of ascertaining
+   * whether (trial_stress, intnl_old) is in fact admissible.
+   *
+   * For over-riding this function, please note the
+   * following three points:
+   *
+   * (1) In your implementation, you will want to set:
+   *   returned_stress (the returned value of stress)
+   *   returned_intnl  (the returned value of the internal variable)
+   *   delta_dp   (the change in plastic strain)
+   * The default implementation does not alter these quantities!
+   *
+   * (2) you must correctly signal "successful_return"
+   * using the return value of this function.  Don't assume
+   * the calling function will do Kuhn-Tucker checking and so forth!
+   *
+   * (3) if you return successful_return = false, you MUST
+   * place the yield function values at (trial_stress, intnl_old)
+   * into yf so the calling function can use this information
+   * optimally.  You will have already calculated these
+   * yield function values, which can be quite expensive, and
+   * it's not very optimal for the calling function to have
+   * to re-calculate them.
+   *
+   * @param trial_stress The trial stress
+   * @param intnl_old Value of the internal parameter
+   * @param E_ijkl Elasticity tensor
+   * @param ep_plastic_tolerance Tolerance defined by the user for the plastic strain
+   * @param[out] returned_stress Lies on the yield surface after returning and produces the correct plastic strain (normality condition)
+   * @param[out] returned_intnl The value of the internal parameter after returning
+   * @param[out] delta_dp The change in plastic strain induced by the return process
+   * @param[out] The value of the yield function, evaluated at (trial_stress, intnl_old) in the case of return value = false (failure), or at (returned_stress, returned_intnl) for return value = true (success)
+   * @param[out] trial_stress_inadmissible Should be set to 0 if the trial_stress is admissible, and 1 if the trial_stress is inadmissible.  This can be used by the calling prorgram
+   * @return true if a successful return (or a return-map not needed), false if the trial_stress is inadmissible but the return process failed
+   */
+  bool returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & returned_stress, Real & returned_intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible) const;
+
   void nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld) const;
 
   RankFourTensor consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm) const;

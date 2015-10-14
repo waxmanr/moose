@@ -48,13 +48,6 @@ protected:
   /// Even if the returnMap fails, return the best values found for stress and internal parameters
   bool _ignore_failures;
 
-  /// Set to true in input file to use radial return map
-  bool _radial_return;
-
-  /// Set to true in input file to use radial return map consistent tangent operator
-  /// this will eventually disappear --- just here to toggle for time comparison
-  bool _radial_return_tan;
-
   /// The type of tangent operator to return.  tangent operator = d(stress_rate)/d(strain_rate).
   enum TangentOperatorEnum {
     elastic, linear, nonlinear
@@ -259,8 +252,8 @@ protected:
    */
   virtual bool singleStep(Real & nr_res2, RankTwoTensor & stress, const std::vector<Real> & intnl_old,
                           std::vector<Real> & intnl, std::vector<Real> & pm, RankTwoTensor & delta_dp,
-                          const RankFourTensor & E_inv, const RankFourTensor & E_ijkl, std::vector<Real> & f,
-                          RankTwoTensor & epp, std::vector<Real> & ic, std::vector<bool> & active,
+                          const RankFourTensor & E_inv, std::vector<Real> & f,RankTwoTensor & epp,
+                          std::vector<Real> & ic, std::vector<bool> & active,
                           DeactivationSchemeEnum deactivation_scheme,
                           bool & linesearch_needed, bool & ld_encountered);
 
@@ -331,7 +324,11 @@ protected:
   virtual void postReturnMap();
 
   /*
-   * performs an elastic step
+   * performs an elastic step,
+   * OR a customized plastic step, with the customization being
+   * defined through a TensorMechanicsPlasticXXXX.returnMap function
+   *
+   * TODO: REWRITE THIS STUFF
    *
    * @param stress_old The value of stress at the previous "time" step
    * @param[out] stress  stress = E_ijkl*plastic_strain
@@ -346,7 +343,7 @@ protected:
    * @param[out] consistent_tangent_operator  The consistent tangent operator d(stress_rate)/d(strain_rate)
    * @return true if the (stress, intnl) are admissible
    */
-  virtual bool elasticStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator);
+  virtual bool quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator);
 
   /*
    * performs a plastic step
@@ -398,7 +395,6 @@ protected:
    * @param cumulative_pm The plastic multipliers needed for this current Return (this is the sum of the plastic multipliers over all substeps if the strain increment was applied in small substeps)
    */
   RankFourTensor consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl, const std::vector<Real> & pm_this_step, const std::vector<Real> & cumulative_pm);
-
 };
 
 #endif //COMPUTEMULTIPLASTICITYSTRESS_H
