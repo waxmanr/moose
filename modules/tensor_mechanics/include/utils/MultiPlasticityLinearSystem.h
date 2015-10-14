@@ -127,9 +127,6 @@ protected:
   /// Minimum value of the _f_tol parameters for the Yield Function User Objects
   Real _min_f_tol;
 
-  /// these are for non-rR
-  std::vector<Real> _rhs;
-  std::vector<double> _a;
 
   /**
    * The constraints.  These are set to zero (or <=0 in the case of the yield functions)
@@ -139,64 +136,14 @@ protected:
    * @param intnl internal parameters
    * @param pm Current value(s) of the plasticity multiplier(s) (consistency parameters)
    * @param delta_dp Change in plastic strain incurred so far during the return
-   * @param f (output) Active yield function(s)
-   * @param r (output) Active flow directions
-   * @param epp (output) Plastic-strain increment constraint
-   * @param ic (output) Active internal-parameter constraint
+   * @param[out] f Active yield function(s)
+   * @param[out] r Active flow directions
+   * @param[out] epp Plastic-strain increment constraint
+   * @param[out] ic Active internal-parameter constraint
    * @param active The active constraints.
    */
   virtual void calculateConstraints(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankTwoTensor & delta_dp, std::vector<Real> & f, std::vector<RankTwoTensor> & r, RankTwoTensor & epp, std::vector<Real> & ic, const std::vector<bool> & active);
 
-
-  /**
-   * Performs a line search.  Algorithm is taken straight from
-   * "Numerical Recipes".  Given the changes dstress, dpm and dintnl
-   * provided by the nrStep routine, a line-search looks for an appropriate
-   * under-relaxation that reduces the residual-squared (nr_res2).
-   *
-   * Most variables are input/output variables: they enter the function
-   * with their values at the start of the Newton step, and they exit
-   * the function with values attained after applying the under-relaxation
-   *
-   * @param nr_res2 (input/output) The residual-squared
-   * @param intnl_old  The internal variables at the previous "time" step
-   * @param intnl (input/output) The internal variables
-   * @param pm (input/output) The plasticity multiplier(s) (consistency parameter(s))
-   * @param E_inv inverse of the elasticity tensor
-   * @param delta_dp (input/output) Change in plastic strain from start of "time" step to current configuration (plastic_strain - plastic_strain_old)
-   * @param dstress Change in stress for a full Newton step
-   * @param dpm Change in plasticity multiplier for a full Newton step
-   * @param dintnl change in internal parameter(s) for a full Newton step
-   * @param f (input/output) Yield function(s).  In this routine, only the active constraints that are not deactivated_due_to_ld are contained in f.
-   * @param epp (input/output) Plastic strain increment constraint
-   * @param ic (input/output) Internal constraint.  In this routine, only the active constraints that are not deactivated_due_to_ld are contained in ic.
-   * @param active The active constraints.
-   * @param deactivated_due_to_ld True if a constraint has temporarily been made deactive due to linear dependence.
-   * @param linesearch_needed (output) True if the full Newton-Raphson step was cut by the linesearch
-   * @return true if successfully found a step that reduces the residual-squared
-   */
-  virtual bool lineSearch(Real & nr_res2, RankTwoTensor & stress, const std::vector<Real> & intnl_old,
-                          std::vector<Real> & intnl, std::vector<Real> & pm, const RankFourTensor & E_inv,
-                          RankTwoTensor & delta_dp, const RankTwoTensor & dstress,
-                          const std::vector<Real> & dpm, const std::vector<Real> & dintnl,
-                          std::vector<Real> & f, RankTwoTensor & epp, std::vector<Real> & ic,
-                          const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld,
-                          bool & linesearch_needed, const Real & _epp_tol);
-
-  /**
-   * The residual-squared
-   * @param pm the plastic multipliers for all constraints
-   * @param f the active yield function(s) (not including the ones that are deactivated_due_to_ld)
-   * @param epp the plastic strain increment constraint
-   * @param ic the active internal constraint(s) (not including the ones that are deactivated_due_to_ld)
-   * @param active true if constraint is active
-   * @param deactivated_due_to_ld true if constraint has been temporarily deactivated due to linear dependence of flow directions
-   */
-  virtual Real residual2(const std::vector<Real> & pm, const std::vector<Real> & f,
-                         const RankTwoTensor & epp, const std::vector<Real> & ic,
-                         const std::vector<bool> & active,
-                         const std::vector<bool> & deactivated_due_to_ld,
-                         const Real & _epp_tol);
 
   /**
    * Calculate the RHS which is
@@ -211,10 +158,10 @@ protected:
    * @param intnl internal parameters
    * @param pm Current value(s) of the plasticity multiplier(s) (consistency parameters)
    * @param delta_dp Change in plastic strain incurred so far during the return
-   * @param rhs (output) the rhs
+   * @param[out] rhs the rhs
    * @param active The active constraints.
    * @param eliminate_ld Check for linear dependence of constraints and put the results into deactivated_due_to_ld.  Usually this should be true, but for certain debug operations it should be false
-   * @param deactivated_due_to_ld (output) constraints deactivated due to linear-dependence of flow directions
+   * @param[out] deactivated_due_to_ld constraints deactivated due to linear-dependence of flow directions
    */
   virtual void calculateRHS(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankTwoTensor & delta_dp, std::vector<Real> & rhs, const std::vector<bool> & active, bool eliminate_ld, std::vector<bool> & deactivated_due_to_ld);
 
@@ -232,13 +179,18 @@ protected:
    * @param pm  Current value of the plasticity multipliers (consistency parameters)
    * @param E_inv inverse of the elasticity tensor
    * @param delta_dp  Current value of the plastic-strain increment (ie plastic_strain - plastic_strain_old)
-   * @param dstress (output) The change in stress for a full Newton step
-   * @param dpm (output) The change in all plasticity multipliers for a full Newton step
-   * @param dintnl (output) The change in all internal variables for a full Newton step
+   * @param[out] dstress The change in stress for a full Newton step
+   * @param[out] dpm The change in all plasticity multipliers for a full Newton step
+   * @param[out] dintnl The change in all internal variables for a full Newton step
    * @param active The active constraints
-   * @param deactivated_due_to_ld (output) The constraints deactivated due to linear-dependence of the flow directions
+   * @param[out] deactivated_due_to_ld The constraints deactivated due to linear-dependence of the flow directions
    */
-  virtual void nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_inv, const RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld);
+  virtual void nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old,
+                      const std::vector<Real> & intnl, const std::vector<Real> & pm,
+                      const RankFourTensor & E_inv, const RankTwoTensor & delta_dp,
+                      RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl,
+                      const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld);
+
 
  private:
 
@@ -253,7 +205,7 @@ protected:
    *     (  r[4](0,0) r[4](0,1) r[4](0,2) r[4](1,1) r[4](1,2) r[4](2,2)  )
    *
    * @param r The flow directions
-   * @param s (output) The singular values
+   * @param[out] s The singular values
    * @return The return value from the PETSc LAPACK gesvd reoutine
    */
   virtual int singularValuesOfR(const std::vector<RankTwoTensor> & r, std::vector<Real> & s);
@@ -267,11 +219,11 @@ protected:
    * @param f Active yield function values
    * @param r the flow directions that for those yield functions that are active upon entry to this function
    * @param active true if active
-   * @param (output) deactivated_due_to_ld Yield functions deactivated due to linearly-dependent flow directions
+   * @param[out] deactivated_due_to_ld Yield functions deactivated due to linearly-dependent flow directions
    */
-  virtual void eliminateLinearDependence(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & f, const std::vector<RankTwoTensor> & r, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld);
-
-
+  virtual void eliminateLinearDependence(const RankTwoTensor & stress, const std::vector<Real> & intnl,
+                                         const std::vector<Real> & f, const std::vector<RankTwoTensor> & r,
+                                         const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld);
 };
 
 #endif //MULTIPLASTICITYLINEARSYSTEM_H

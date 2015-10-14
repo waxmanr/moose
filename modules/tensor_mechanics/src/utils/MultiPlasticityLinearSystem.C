@@ -23,9 +23,7 @@ InputParameters validParams<MultiPlasticityLinearSystem>()
 MultiPlasticityLinearSystem::MultiPlasticityLinearSystem(const InputParameters & parameters):
     MultiPlasticityRawComponentAssembler(parameters),
     _svd_tol(parameters.get<Real>("linear_dependent")),
-    _min_f_tol(-1.0),
-    _rhs(100,0.0),
-    _a(200,0.0)
+    _min_f_tol(-1.0)
 {
   for (unsigned model = 0 ; model < _num_models ; ++model)
     if (_min_f_tol == -1.0 || _min_f_tol > _f[model]->_f_tol)
@@ -212,6 +210,7 @@ MultiPlasticityLinearSystem::calculateConstraints(const RankTwoTensor & stress, 
   // yield functions
   yieldFunction(stress, intnl, active, f);
 
+
   // flow directions and "epp"
   flowPotential(stress, intnl, active, r);
   epp = RankTwoTensor();
@@ -243,166 +242,7 @@ MultiPlasticityLinearSystem::calculateConstraints(const RankTwoTensor & stress, 
 }
 
 
-bool
-MultiPlasticityLinearSystem::lineSearch(Real & nr_res2,
-                                         RankTwoTensor & stress,
-                                         const std::vector<Real> & intnl_old,
-                                         std::vector<Real> & intnl,
-                                         std::vector<Real> & pm,
-                                         const RankFourTensor & E_inv,
-                                         RankTwoTensor & delta_dp,
-                                         const RankTwoTensor & dstress,
-                                         const std::vector<Real> & dpm,
-                                         const std::vector<Real> & dintnl,
-                                         std::vector<Real> & f,
-                                         RankTwoTensor & epp,
-                                         std::vector<Real> & ic,
-                                         const std::vector<bool> & active,
-                                         const std::vector<bool> & deactivated_due_to_ld,
-                                         bool & linesearch_needed,
-                                         const Real & _epp_tol)
-{
-  // Line search algorithm straight out of "Numerical Recipes"
 
-  bool success = true; // return value: will be false if linesearch couldn't reduce the residual-squared
-
-  // Aim is to decrease residual2
-
-  Real lam = 1.0; // the line-search parameter: 1.0 is a full Newton step
-  Real lam_min = 1E-10; // minimum value of lam allowed - perhaps this should be dynamically calculated?
-  Real f0 = nr_res2; // initial value of residual2
-  Real slope = -2*nr_res2; // "Numerical Recipes" uses -b*A*x, in order to check for roundoff, but i hope the nrStep would warn if there were problems.
-  Real tmp_lam; // cached value of lam used in quadratic & cubic line search
-  Real f2 = nr_res2; // cached value of f = residual2 used in the cubic in the line search
-  Real lam2 = lam; // cached value of lam used in the cubic in the line search
-
-  // pm during the line-search
-  std::vector<Real> ls_pm;
-  ls_pm.resize(pm.size());
-
-  // delta_dp during the line-search
-  RankTwoTensor ls_delta_dp;
-
-  // internal parameter during the line-search
-  std::vector<Real> ls_intnl;
-  ls_intnl.resize(intnl.size());
-
-  // stress during the line-search
-  RankTwoTensor ls_stress;
-
-  // flow directions (not used in line search, but calculateConstraints returns this parameter)
-  std::vector<RankTwoTensor> r;
-
-  while (true)
-  {
-    // update the variables using this line-search parameter
-    for (unsigned alpha = 0 ; alpha < pm.size() ; ++alpha)
-      ls_pm[alpha] = pm[alpha] + dpm[alpha]*lam;
-    ls_delta_dp = delta_dp - E_inv*dstress*lam;
-    for (unsigned a = 0 ; a < intnl.size() ; ++ a)
-      ls_intnl[a] = intnl[a] + dintnl[a]*lam;
-    ls_stress = stress + dstress*lam;
-
-    // calculate the new active yield functions, epp and active internal constraints
-    calculateConstraints(ls_stress, intnl_old, ls_intnl, ls_pm, ls_delta_dp, f, r, epp, ic, active);
-
-    // calculate the new residual-squared
-    nr_res2 = residual2(ls_pm, f, epp, ic, active, deactivated_due_to_ld, _epp_tol);
-
-    if (nr_res2 < f0 + 1E-4*lam*slope)
-      break;
-    else if (lam < lam_min)
-    {
-      success = false;
-      // restore plastic multipliers, yield functions, etc to original values
-      for (unsigned alpha = 0 ; alpha < pm.size() ; ++alpha)
-        ls_pm[alpha] = pm[alpha];
-      ls_delta_dp = delta_dp;
-      for (unsigned a = 0 ; a < intnl.size() ; ++ a)
-        ls_intnl[a] = intnl[a];
-      ls_stress = stress;
-      calculateConstraints(ls_stress, intnl_old, ls_intnl, ls_pm, ls_delta_dp, f, r, epp, ic, active);
-      nr_res2 = residual2(ls_pm, f, epp, ic, active, deactivated_due_to_ld, _epp_tol);
-      break;
-    }
-    else if (lam == 1.0)
-    {
-      // model as a quadratic
-      tmp_lam = -slope/2.0/(nr_res2 - f0 - slope);
-    }
-    else
-    {
-      // model as a cubic
-      Real rhs1 = nr_res2 - f0 - lam*slope;
-      Real rhs2 = f2 - f0 - lam2*slope;
-      Real a = (rhs1/std::pow(lam, 2) - rhs2/std::pow(lam2, 2))/(lam - lam2);
-      Real b = (-lam2*rhs1/std::pow(lam, 2) + lam*rhs2/std::pow(lam2, 2))/(lam - lam2);
-      if (a == 0)
-        tmp_lam = -slope/2.0/b;
-      else
-      {
-        Real disc = std::pow(b, 2) - 3*a*slope;
-        if (disc < 0)
-          tmp_lam = 0.5*lam;
-        else if (b <= 0)
-          tmp_lam = (-b + std::sqrt(disc))/3.0/a;
-        else
-          tmp_lam = -slope/(b + std::sqrt(disc));
-      }
-      if (tmp_lam > 0.5*lam)
-        tmp_lam = 0.5*lam;
-    }
-    lam2 = lam;
-    f2 = nr_res2;
-    lam = std::max(tmp_lam, 0.1*lam);
-  }
-
-  if (lam < 1.0)
-    linesearch_needed = true;
-
-  // assign the quantities found in the line-search
-  // back to the originals
-  for (unsigned alpha = 0 ; alpha < pm.size() ; ++alpha)
-    pm[alpha] = ls_pm[alpha];
-  delta_dp = ls_delta_dp;
-  for (unsigned a = 0 ; a < intnl.size() ; ++ a)
-    intnl[a] = ls_intnl[a];
-  stress = ls_stress;
-
-  return success;
-}
-
-Real
-MultiPlasticityLinearSystem::residual2(const std::vector<Real> & pm, const std::vector<Real> & f, const RankTwoTensor & epp, const std::vector<Real> & ic, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, const Real & _epp_tol)
-{
-  Real nr_res2 = 0;
-  unsigned ind = 0;
-
-  for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
-    if (active[surface])
-    {
-      if (!deactivated_due_to_ld[surface])
-      {
-        if (!(pm[surface] == 0 && f[ind] <= 0) )
-          nr_res2 += 0.5*std::pow( f[ind]/_f[modelNumber(surface)]->_f_tol, 2);
-      }
-      else if (deactivated_due_to_ld[surface] && f[ind] > 0)
-        nr_res2 += 0.5*std::pow(f[ind]/_f[modelNumber(surface)]->_f_tol, 2);
-      ind++;
-    }
-
-  nr_res2 += 0.5*std::pow(epp.L2norm()/_epp_tol, 2);
-
-  std::vector<bool> active_not_deact(_num_surfaces);
-  for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
-    active_not_deact[surface] = (active[surface] && !deactivated_due_to_ld[surface]);
-  ind = 0;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
-    if (anyActiveSurfaces(model, active_not_deact))
-      nr_res2 += 0.5*std::pow(ic[ind++]/_f[model]->_ic_tol, 2);
-
-  return nr_res2;
-}
 
 void
 MultiPlasticityLinearSystem::calculateRHS(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankTwoTensor & delta_dp, std::vector<Real> & rhs, const std::vector<bool> & active, bool eliminate_ld, std::vector<bool> & deactivated_due_to_ld)
@@ -444,16 +284,18 @@ MultiPlasticityLinearSystem::calculateRHS(const RankTwoTensor & stress, const st
   unsigned int dim = 3;
   unsigned int system_size = 6 + num_active_f + num_active_ic; // "6" comes from symmeterizing epp, num_active_f comes from "f", num_active_f comes from "ic"
 
+  rhs.resize(system_size);
+
   unsigned ind = 0;
   for (unsigned i = 0 ; i < dim ; ++i)
     for (unsigned j = 0 ; j <= i ; ++j)
-      _rhs[ind++] = -epp(i, j);
+      rhs[ind++] = -epp(i, j);
   unsigned active_surface = 0;
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
     if (active[surface])
     {
       if (!deactivated_due_to_ld[surface])
-        _rhs[ind++] = -f[active_surface];
+        rhs[ind++] = -f[active_surface];
       active_surface++;
     }
   unsigned active_model = 0;
@@ -461,7 +303,7 @@ MultiPlasticityLinearSystem::calculateRHS(const RankTwoTensor & stress, const st
     if (anyActiveSurfaces(model, active))
     {
       if (anyActiveSurfaces(model, active_not_deact))
-        _rhs[ind++] = -ic[active_model];
+        rhs[ind++] = -ic[active_model];
       active_model++;
     }
 
@@ -638,6 +480,7 @@ MultiPlasticityLinearSystem::calculateJacobian(const RankTwoTensor & stress, con
   }
 
 
+
   unsigned int dim = 3;
   unsigned int system_size = 6 + num_active_surface + num_active_model; // "6" comes from symmeterizing epp
   jac.resize(system_size);
@@ -703,39 +546,27 @@ void
 MultiPlasticityLinearSystem::nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_inv, const RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld)
 {
   // Calculate RHS and Jacobian
-  calculateRHS(stress, intnl_old, intnl, pm, delta_dp, _rhs, active, true, deactivated_due_to_ld);
+  std::vector<Real> rhs;
+  calculateRHS(stress, intnl_old, intnl, pm, delta_dp, rhs, active, true, deactivated_due_to_ld);
 
   std::vector<std::vector<Real> > jac;
   calculateJacobian(stress, intnl, pm, E_inv, active, deactivated_due_to_ld, jac);
 
 
   // prepare for LAPACKgesv_ routine provided by PETSc
-  std::vector<bool> active_not_deact(_num_surfaces);
-  for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
-    active_not_deact[surface] = (active[surface] && !deactivated_due_to_ld[surface]);
+  int system_size = rhs.size();
 
-  unsigned num_active_f = 0;
-  for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
-    if (active_not_deact[surface])
-      num_active_f++;
-
-  unsigned num_active_ic = 0;
-  for (unsigned model = 0 ; model < _num_models ; ++model)
-    if (anyActiveSurfaces(model, active_not_deact))
-      num_active_ic++;
-
-  int system_size = 6 + num_active_f + num_active_ic; // "6" comes from symmeterizing epp, num_active_f comes from "f", num_active_f comes from "ic"
-
+  std::vector<double> a(system_size*system_size);
   // Fill in the a "matrix" by going down columns
   unsigned ind = 0;
   for (int col = 0 ; col < system_size ; ++col)
     for (int row = 0 ; row < system_size ; ++row)
-      _a[ind++] = jac[row][col];
+      a[ind++] = jac[row][col];
 
   int nrhs = 1;
   std::vector<int> ipiv(system_size);
   int info;
-  LAPACKgesv_(&system_size, &nrhs, &_a[0], &system_size, &ipiv[0], &_rhs[0], &system_size, &info);
+  LAPACKgesv_(&system_size, &nrhs, &a[0], &system_size, &ipiv[0], &rhs[0], &system_size, &info);
 
   if (info != 0)
     mooseError("In solving the linear system in a Newton-Raphson process, the PETSC LAPACK gsev routine returned with error code " << info);
@@ -743,6 +574,7 @@ MultiPlasticityLinearSystem::nrStep(const RankTwoTensor & stress, const std::vec
 
 
   // Extract the results back to dstress, dpm and dintnl
+  std::vector<bool> active_not_deact(_num_surfaces);
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
     active_not_deact[surface] = (active[surface] && !deactivated_due_to_ld[surface]);
 
@@ -751,20 +583,15 @@ MultiPlasticityLinearSystem::nrStep(const RankTwoTensor & stress, const std::vec
 
   for (unsigned i = 0 ; i < dim ; ++i)
     for (unsigned j = 0 ; j <= i ; ++j)
-    {
-      dstress(i, j) = dstress(j, i) = _rhs[ind++];
-    }
+      dstress(i, j) = dstress(j, i) = rhs[ind++];
   dpm.assign(_num_surfaces, 0);
   for (unsigned surface = 0 ; surface < _num_surfaces ; ++surface)
     if (active_not_deact[surface])
-    {
-      dpm[surface] = _rhs[ind++];
-    }
-
+      dpm[surface] = rhs[ind++];
   dintnl.assign(_num_models, 0);
   for (unsigned model = 0 ; model < _num_models ; ++model)
     if (anyActiveSurfaces(model, active_not_deact))
-      dintnl[model] = _rhs[ind++];
+      dintnl[model] = rhs[ind++];
 
   mooseAssert(static_cast<int>(ind) == system_size, "Incorrect extracting of changes from NR solution in nrStep");
 }

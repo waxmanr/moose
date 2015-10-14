@@ -171,6 +171,24 @@ TensorMechanicsPlasticModel::modelName() const
   return "None";
 }
 
+bool
+TensorMechanicsPlasticModel::returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl, Real /*ep_plastic_tolerance*/, RankTwoTensor & /*returned_stress*/, Real & /*returned_intnl*/, RankTwoTensor & /*delta_dp*/, std::vector<Real> & yf, unsigned & trial_stress_inadmissible) const
+{
+  trial_stress_inadmissible = 0;
+  yieldFunctionV(trial_stress, intnl_old, yf);
+
+  for (unsigned sf = 0 ; sf < numberSurfaces() ; ++sf)
+    if (yf[sf] > _f_tol)
+      trial_stress_inadmissible = 1;
+
+  // example of checking Kuhn-Tucker
+  std::vector<Real> dpm(numberSurfaces(), 0);
+  for (unsigned sf = 0 ; sf < numberSurfaces() ; ++sf)
+    if (!( (dpm[sf] == 0 && yf[sf] <= _f_tol) || (dpm[sf] > 0 && yf[sf] <= _f_tol && yf[sf] >= -_f_tol) ))
+      return false;
+  return true;
+}
+
 void
 TensorMechanicsPlasticModel::nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld) const
 {}

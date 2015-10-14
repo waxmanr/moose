@@ -96,6 +96,35 @@ TensorMechanicsPlasticJ2::modelName() const
   return "J2";
 }
 
+bool
+TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl, Real /*ep_plastic_tolerance*/, RankTwoTensor & returned_stress, Real & returned_intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible) const
+{
+  yf.resize(1);
+
+  Real yf_orig = yieldFunction(trial_stress, intnl_old);
+
+  if (yf_orig < _f_tol)
+  {
+    // the trial_stress is admissible
+    trial_stress_inadmissible = 0;
+    yf[0] = yf_orig;
+    return true;
+  }
+
+  // TODO: Rachel to check the following formulae - they are wrong for hardening!!
+  // Note that yieldFunction(returned_stress, returned_intnl) should be zero!!
+  trial_stress_inadmissible = 1;
+  Real mu = E_ijkl(0,1,0,1);
+  Real jac = 3*mu - dyieldFunction_dintnl(trial_stress, intnl_old);
+  Real dpm = yf_orig/jac;
+  RankTwoTensor df_dstress = dyieldFunction_dstress(trial_stress, intnl_old);
+  returned_stress = trial_stress - 2*mu*dpm*df_dstress;
+  returned_intnl = intnl_old + dpm;
+  delta_dp = dpm*df_dstress;
+  yf[0] = 0;
+  return true;
+}
+
 void
 TensorMechanicsPlasticJ2::nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld) const
 {
