@@ -137,6 +137,9 @@ ComputeMultiPlasticityStress::computeQpStress()
   bool ld_encountered = false;
   bool constraints_added = false;
 
+  if (_current_elem->id() == 0 && _qp == 0)
+    std::cout << "computeQpStress, pre-quickStep() " << _current_elem->id() << ", " << _qp << std::endl; //remove
+
   // try a "quick" return first - this can be purely elastic, or a customised plastic return defined by a TensorMechanicsPlasticXXXX UserObject
   bool found_solution = quickStep(_stress_old[_qp], _stress[_qp], _intnl_old[_qp], _intnl[_qp], _plastic_strain_old[_qp], _plastic_strain[_qp], _my_elasticity_tensor, _my_strain_increment, _yf[_qp], number_iterations, _Jacobian_mult[_qp]);
 
@@ -144,6 +147,8 @@ ComputeMultiPlasticityStress::computeQpStress()
   if (!found_solution)
     plasticStep(_stress_old[_qp], _stress[_qp], _intnl_old[_qp], _intnl[_qp], _plastic_strain_old[_qp], _plastic_strain[_qp], _my_elasticity_tensor, _my_strain_increment, _yf[_qp], number_iterations, linesearch_needed, ld_encountered, constraints_added, _Jacobian_mult[_qp]);
 
+  if (_current_elem->id() == 0 && _qp == 0)
+    std::cout << "computeQpStress, post-quickStep() " << _current_elem->id() << ", " << _qp << std::endl; //remove
 
   postReturnMap();  // rotate back from new frame if necessary
 
@@ -226,7 +231,9 @@ ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTw
     // In either case:
     plastic_strain = plastic_strain_old;
     if (successful_return)
+    {
       consistent_tangent_operator = E_ijkl;
+    }
     return successful_return;
   }
   else if (num_plastic_returns == 1 && successful_return)
@@ -272,6 +279,7 @@ ComputeMultiPlasticityStress::plasticStep(const RankTwoTensor & stress_old, Rank
   Real step_size = 1.0;
   Real time_simulated = 0.0;
 
+  std::cout << "fcn plasticStep() entered." << std::endl; //remove
 
   // the "good" variables hold the latest admissible stress
   // and internal parameters.

@@ -11,6 +11,7 @@ InputParameters validParams<TensorMechanicsPlasticJ2>()
 {
   InputParameters params = validParams<TensorMechanicsPlasticModel>();
   params.addRequiredParam<UserObjectName>("yield_strength", "A TensorMechanicsHardening UserObject that defines hardening of the yield strength");
+  params.addParam<bool>("update_yield_strength", false, "When set to true, yield stress will be updated during custom return map process");
   params.addClassDescription("J2 plasticity, associative, with hardening");
 
   return params;
@@ -19,6 +20,7 @@ InputParameters validParams<TensorMechanicsPlasticJ2>()
 TensorMechanicsPlasticJ2::TensorMechanicsPlasticJ2(const InputParameters & parameters) :
     TensorMechanicsPlasticModel(parameters),
     _strength(getUserObject<TensorMechanicsHardeningModel>("yield_strength")),
+    _update_strength(getParam<bool>("update_yield_strength")),
     _iden(RankTwoTensor::initIdentity),
     _iden4(RankFourTensor::initIdentitySymmetricFour)
 {
@@ -111,17 +113,33 @@ TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Re
     return true;
   }
 
+  //std::cout << "Custom plastic j2." << std::endl; //remove
+
   // TODO: Rachel to check the following formulae - they are wrong for hardening!!
   // Note that yieldFunction(returned_stress, returned_intnl) should be zero!!
   trial_stress_inadmissible = 1;
   Real mu = E_ijkl(0,1,0,1);
-  Real jac = 3*mu - dyieldFunction_dintnl(trial_stress, intnl_old);
-  Real dpm = yf_orig/jac;
-  RankTwoTensor df_dstress = dyieldFunction_dstress(trial_stress, intnl_old);
-  returned_stress = trial_stress - 2*mu*dpm*df_dstress;
-  returned_intnl = intnl_old + dpm;
-  delta_dp = dpm*df_dstress;
-  yf[0] = 0;
+
+  RankTwoTensor trial_stress_loop = trial_stress;
+  Real intnl_old_loop = intnl_old;
+
+  do {
+    Real jac = 3*mu - dyieldFunction_dintnl(trial_stress_loop, intnl_old_loop);
+    Real dpm = yf_orig/jac;
+    RankTwoTensor df_dstress = dyieldFunction_dstress(trial_stress_loop, intnl_old_loop);
+    returned_stress = trial_stress_loop - 2*mu*dpm*df_dstress;
+    returned_intnl = intnl_old_loop + dpm;
+    delta_dp = dpm*df_dstress;
+    yf[0] = yieldFunction(returned_stress, intnl_old_loop);
+    trial_stress_loop = returned_stress;
+    intnl_old_loop = returned_intnl;
+    if (yf[0] > yf_orig) // not converging
+      return false;
+  } while (_update_strength && yf[0] > _f_tol);
+
+  if (!_update_strength)
+    yf[0] = 0;
+
   return true;
 }
 

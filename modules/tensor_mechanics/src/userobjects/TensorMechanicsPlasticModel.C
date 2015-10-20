@@ -181,6 +181,8 @@ TensorMechanicsPlasticModel::returnMap(const RankTwoTensor & trial_stress, const
     if (yf[sf] > _f_tol)
       trial_stress_inadmissible = 1;
 
+  std::cout << "Custom plastic base." << std::endl; //remove
+
   // example of checking Kuhn-Tucker
   std::vector<Real> dpm(numberSurfaces(), 0);
   for (unsigned sf = 0 ; sf < numberSurfaces() ; ++sf)

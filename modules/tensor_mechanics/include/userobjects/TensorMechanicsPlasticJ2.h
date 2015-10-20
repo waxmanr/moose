@@ -91,9 +91,11 @@ class TensorMechanicsPlasticJ2 : public TensorMechanicsPlasticModel
 
   const TensorMechanicsHardeningModel & _strength;
 
-   /// pre-made identity tensors
-   RankTwoTensor _iden;
-   RankFourTensor _iden4;
+  const bool _update_strength;
+
+  /// pre-made identity tensors
+  const RankTwoTensor _iden;
+  const RankFourTensor _iden4;
 
   /**
    * Performs a custom return-map.
