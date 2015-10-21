@@ -138,7 +138,8 @@ class TensorMechanicsPlasticModel : public GeneralUserObject
    * @param[out] act act[i] = true if the i_th yield function is active
    * @param[out] returned_stress Approximate value of the returned stress
    */
-  virtual void activeConstraints(const std::vector<Real> & f, const RankTwoTensor & stress, const Real & intnl, const RankFourTensor & Eijkl, std::vector<bool> & act, RankTwoTensor & returned_stress) const;
+  virtual void activeConstraints(const std::vector<Real> & f, const RankTwoTensor & stress, const Real & intnl,
+                                  const RankFourTensor & Eijkl, std::vector<bool> & act, RankTwoTensor & returned_stress) const;
 
   /// Returns the model name (eg "MohrCoulom")
   virtual std::string modelName() const;
@@ -206,18 +207,30 @@ class TensorMechanicsPlasticModel : public GeneralUserObject
     * @param ep_plastic_tolerance Tolerance defined by the user for the plastic strain
     * @param[out] returned_stress Lies on the yield surface after returning and produces the correct plastic strain (normality condition)
     * @param[out] returned_intnl The value of the internal parameter after returning
+    * @param[out] pm   plastic multipliers
     * @param[out] delta_dp The change in plastic strain induced by the return process
     * @param[out] The value of the yield function, evaluated at (trial_stress, intnl_old) in the case of return value = false (failure), or at (returned_stress, returned_intnl) for return value = true (success)
     * @param[out] trial_stress_inadmissible Should be set to 0 if the trial_stress is admissible, and 1 if the trial_stress is inadmissible.  This can be used by the calling prorgram
+    * @param update_pm  true if called from plasticStep::returnMap
     * @return true if a successful return (or a return-map not needed), false if the trial_stress is inadmissible but the return process failed
     */
-  virtual bool returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & returned_stress, Real & returned_intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible) const;
+  virtual bool returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl,
+                                  Real ep_plastic_tolerance, RankTwoTensor & returned_stress, Real & returned_intnl,
+                                  Real & pm, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible,
+                                  const bool & update_pm) const;
 
-  virtual void nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld) const;
-
-  virtual void calculateJacobian(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijlk, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<Real> & df_dintnl, std::vector<RankTwoTensor> & df_dstress, std::vector<Real> & jac, const Real & mu) const;
-
-  virtual RankFourTensor consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl) const;
+  /**
+    * Calculates a custom consistent tangent operator.
+    * You may choose to over-ride this in your
+    * derived TensorMechanicsPlasticXXXX class.
+    *
+    * @param stress current stress state
+    * @param intnl internal parameters
+    * @param E_ijkl elasticity tensor
+    * @return the consistent tangent operator: E_ijkl if not over-ridden
+    */
+  virtual RankFourTensor consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl,
+                                  const RankFourTensor & E_ijkl) const;
 
 
  protected:

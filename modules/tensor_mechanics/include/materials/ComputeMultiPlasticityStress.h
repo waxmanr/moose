@@ -334,6 +334,7 @@ protected:
    * @param[out] stress  stress = E_ijkl*plastic_strain
    * @param intnl_old The internal variables at the previous "time" step
    * @param[out] intnl   intnl = intnl_old
+   * @param[out] pm   plastic multipliers
    * @param plastic_strain_old The value of plastic strain at the previous "time" step
    * @param[out] plastic_strain    plastic_strain = plastic_strain_old
    * @param E_ijkl   The elasticity tensor.
@@ -341,9 +342,13 @@ protected:
    * @param[out] yf   All the yield functions at (stress, intnl)
    * @param[out] iterations  zero
    * @param[out] consistent_tangent_operator  The consistent tangent operator d(stress_rate)/d(strain_rate)
+   * @param update_pm  true if called from plasticStep::returnMap
    * @return true if the (stress, intnl) are admissible
    */
-  virtual bool quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator);
+  virtual bool quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old,
+                        std::vector<Real> & intnl, std::vector<Real> & pm, const RankTwoTensor & plastic_strain_old,
+                        RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment,
+                        std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator, const bool & update_pm);
 
   /*
    * performs a plastic step

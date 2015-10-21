@@ -487,7 +487,10 @@ MultiPlasticityRawComponentAssembler::buildActiveConstraintsRock(const std::vect
  *   num_successful_plastic_returns is set appropriately
  */
 bool
-MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_stress, const std::vector<Real> & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & stress, std::vector<Real> & intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & num_successful_plastic_returns, unsigned & custom_model)
+MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_stress, const std::vector<Real> & intnl_old,
+                                      const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & stress,
+                                      std::vector<Real> & intnl, std::vector<Real> & pm, RankTwoTensor & delta_dp, std::vector<Real> & yf,
+                                      unsigned & num_successful_plastic_returns, unsigned & custom_model, const bool & update_pm)
 {
   mooseAssert(intnl_old.size() == _num_models, "Incorrect size of internal parameters");
   mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
@@ -512,7 +515,7 @@ MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_s
   {
     if (using_custom_return_map)
     {
-      bool model_returned = _f[model]->returnMap(trial_stress, intnl_old[model], E_ijkl, ep_plastic_tolerance, returned_stress, intnl[model], model_delta_dp, model_f, trial_stress_inadmissible);
+      bool model_returned = _f[model]->returnMap(trial_stress, intnl_old[model], E_ijkl, ep_plastic_tolerance, returned_stress, intnl[model], pm[model], model_delta_dp, model_f, trial_stress_inadmissible, update_pm);
       if (!trial_stress_inadmissible)
       {
         // in the elastic zone: record the yield-function values

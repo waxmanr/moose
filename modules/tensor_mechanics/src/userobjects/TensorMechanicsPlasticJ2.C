@@ -99,7 +99,10 @@ TensorMechanicsPlasticJ2::modelName() const
 }
 
 bool
-TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl, Real /*ep_plastic_tolerance*/, RankTwoTensor & returned_stress, Real & returned_intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible) const
+TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl,
+                                Real /*ep_plastic_tolerance*/, RankTwoTensor & returned_stress, Real & returned_intnl,
+                                Real & pm, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible,
+                                const bool & update_pm) const
 {
   yf.resize(1);
 
@@ -112,8 +115,6 @@ TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Re
     yf[0] = yf_orig;
     return true;
   }
-
-  //std::cout << "Custom plastic j2." << std::endl; //remove
 
   // TODO: Rachel to check the following formulae - they are wrong for hardening!!
   // Note that yieldFunction(returned_stress, returned_intnl) should be zero!!
@@ -131,10 +132,15 @@ TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Re
     returned_intnl = intnl_old_loop + dpm;
     delta_dp = dpm*df_dstress;
     yf[0] = yieldFunction(returned_stress, intnl_old_loop);
+    if (update_pm)
+      pm = dpm;
+    if (yf[0] > yf_orig) // not converging
+    {
+      yf[0] = yf_orig;
+      return false;
+    }
     trial_stress_loop = returned_stress;
     intnl_old_loop = returned_intnl;
-    if (yf[0] > yf_orig) // not converging
-      return false;
   } while (_update_strength && yf[0] > _f_tol);
 
   if (!_update_strength)
@@ -143,47 +149,9 @@ TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Re
   return true;
 }
 
-void
-TensorMechanicsPlasticJ2::nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld) const
-{
-  // Calculate yield function and Jacobian (jac is scalar in this case)
-  Real yf = yieldFunction(stress, intnl[0]);
-
-  Real mu = E_ijkl(0,1,0,1);
-
-  std::vector<Real> jac;
-  jac.assign(1,0);
-  std::vector<Real> df_dintnl;
-  df_dintnl.assign(1,0);
-  std::vector<RankTwoTensor> df_dstress;
-  df_dstress.resize(1);
-  calculateJacobian(stress, intnl, pm, E_ijkl, active, deactivated_due_to_ld, df_dintnl, df_dstress, jac, mu);
-
-  dpm.assign(1,0);
-  dpm[0] = yf / jac[0];
-  //dpm = f / (3*mu - df_dintnl);
-
-  dstress = -2 * mu * dpm[0] * df_dstress[0];
-  dintnl.assign(1,0);
-  dintnl[0] = dpm[0]; // only internal variable is hardening; q1 = pm
-}
-
-void
-TensorMechanicsPlasticJ2::calculateJacobian(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijlk, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<Real> & df_dintnl, std::vector<RankTwoTensor> & df_dstress, std::vector<Real> & jac, const Real & mu) const
-{
-  // plastic modulus H = -df/dq = -df_dintnl
-  // needed to calc dpm in nrStep()
-  df_dintnl[0] = dyieldFunction_dintnl(stress, intnl[0]);
-
-  // df/dstress = sqrt(3/2) * n_hat
-  df_dstress[0] = dyieldFunction_dstress(stress, intnl[0]);
-
-  jac[0] = 3*mu - df_dintnl[0];
-}
-
-
 RankFourTensor
-TensorMechanicsPlasticJ2::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl) const
+TensorMechanicsPlasticJ2::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl,
+                                            const RankFourTensor & E_ijkl) const
 {
 
   Real mu = E_ijkl(0,1,0,1);

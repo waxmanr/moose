@@ -157,7 +157,8 @@ TensorMechanicsPlasticModel::dhardPotential_dintnlV(const RankTwoTensor & stress
 
 
 void
-TensorMechanicsPlasticModel::activeConstraints(const std::vector<Real> & f, const RankTwoTensor & /*stress*/, const Real & /*intnl*/, const RankFourTensor & /*Eijkl*/, std::vector<bool> & act, RankTwoTensor & /*returned_stress*/) const
+TensorMechanicsPlasticModel::activeConstraints(const std::vector<Real> & f, const RankTwoTensor & /*stress*/, const Real & /*intnl*/,
+                                const RankFourTensor & /*Eijkl*/, std::vector<bool> & act, RankTwoTensor & /*returned_stress*/) const
 {
   mooseAssert(f.size() == numberSurfaces(), "f incorrectly sized at " << f.size() << " in activeConstraints");
   act.resize(numberSurfaces());
@@ -172,7 +173,10 @@ TensorMechanicsPlasticModel::modelName() const
 }
 
 bool
-TensorMechanicsPlasticModel::returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl, Real /*ep_plastic_tolerance*/, RankTwoTensor & /*returned_stress*/, Real & /*returned_intnl*/, RankTwoTensor & /*delta_dp*/, std::vector<Real> & yf, unsigned & trial_stress_inadmissible) const
+TensorMechanicsPlasticModel::returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl,
+                                Real /*ep_plastic_tolerance*/, RankTwoTensor & /*returned_stress*/, Real & /*returned_intnl*/,
+                                Real & /*pm*/, RankTwoTensor & /*delta_dp*/, std::vector<Real> & yf, unsigned & trial_stress_inadmissible,
+                                const bool & update_pm) const
 {
   trial_stress_inadmissible = 0;
   yieldFunctionV(trial_stress, intnl_old, yf);
@@ -180,8 +184,6 @@ TensorMechanicsPlasticModel::returnMap(const RankTwoTensor & trial_stress, const
   for (unsigned sf = 0 ; sf < numberSurfaces() ; ++sf)
     if (yf[sf] > _f_tol)
       trial_stress_inadmissible = 1;
-
-  std::cout << "Custom plastic base." << std::endl; //remove
 
   // example of checking Kuhn-Tucker
   std::vector<Real> dpm(numberSurfaces(), 0);
@@ -191,16 +193,9 @@ TensorMechanicsPlasticModel::returnMap(const RankTwoTensor & trial_stress, const
   return true;
 }
 
-void
-TensorMechanicsPlasticModel::nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld) const
-{}
-
-void // probably not needed in base class, as calcJac is called within nrStep
-TensorMechanicsPlasticModel::calculateJacobian(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijlk, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<Real> & df_dintnl, std::vector<RankTwoTensor> & df_dstress, std::vector<Real> & jac, const Real & mu) const
-{}
-
 RankFourTensor
-TensorMechanicsPlasticModel::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl) const
+TensorMechanicsPlasticModel::consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl,
+                                const RankFourTensor & E_ijkl) const
 {
-  return RankFourTensor();
+  return E_ijkl;
 }

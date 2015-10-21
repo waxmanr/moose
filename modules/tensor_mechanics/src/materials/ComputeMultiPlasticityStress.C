@@ -137,18 +137,16 @@ ComputeMultiPlasticityStress::computeQpStress()
   bool ld_encountered = false;
   bool constraints_added = false;
 
-  if (_current_elem->id() == 0 && _qp == 0)
-    std::cout << "computeQpStress, pre-quickStep() " << _current_elem->id() << ", " << _qp << std::endl; //remove
+  // note tpm unused, just for quickstep fcn param since pm not yet defined
+  std::vector<Real> tpm;
+  tpm.assign(0,0);
 
   // try a "quick" return first - this can be purely elastic, or a customised plastic return defined by a TensorMechanicsPlasticXXXX UserObject
-  bool found_solution = quickStep(_stress_old[_qp], _stress[_qp], _intnl_old[_qp], _intnl[_qp], _plastic_strain_old[_qp], _plastic_strain[_qp], _my_elasticity_tensor, _my_strain_increment, _yf[_qp], number_iterations, _Jacobian_mult[_qp]);
+  bool found_solution = quickStep(_stress_old[_qp], _stress[_qp], _intnl_old[_qp], _intnl[_qp], tpm, _plastic_strain_old[_qp], _plastic_strain[_qp], _my_elasticity_tensor, _my_strain_increment, _yf[_qp], number_iterations, _Jacobian_mult[_qp], false);
 
   // if not purely elastic, do some plastic return
   if (!found_solution)
     plasticStep(_stress_old[_qp], _stress[_qp], _intnl_old[_qp], _intnl[_qp], _plastic_strain_old[_qp], _plastic_strain[_qp], _my_elasticity_tensor, _my_strain_increment, _yf[_qp], number_iterations, linesearch_needed, ld_encountered, constraints_added, _Jacobian_mult[_qp]);
-
-  if (_current_elem->id() == 0 && _qp == 0)
-    std::cout << "computeQpStress, post-quickStep() " << _current_elem->id() << ", " << _qp << std::endl; //remove
 
   postReturnMap();  // rotate back from new frame if necessary
 
@@ -210,7 +208,7 @@ ComputeMultiPlasticityStress::postReturnMap()
 }
 
 bool
-ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator)
+ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, std::vector<Real> & pm, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator, const bool & update_pm)
 {
   iterations = 0;
 
@@ -220,7 +218,7 @@ ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTw
   // the following does the customized returnMap algorithm
   // for all the plastic models.
   unsigned custom_model = 0;
-  bool successful_return = returnMapAll(stress_old + E_ijkl*strain_increment, intnl_old, E_ijkl, _epp_tol, stress, intnl, delta_dp, yf, num_plastic_returns, custom_model);
+  bool successful_return = returnMapAll(stress_old + E_ijkl*strain_increment, intnl_old, E_ijkl, _epp_tol, stress, intnl, pm, delta_dp, yf, num_plastic_returns, custom_model, update_pm);
 
   if (num_plastic_returns == 0)
   {
@@ -242,11 +240,10 @@ ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTw
     // and the other models have signalled they are elastic at
     // the trial stress
     plastic_strain = plastic_strain_old + delta_dp;
-    if (_tangent_operator_type == elastic)
-      consistent_tangent_operator = E_ijkl;
-    else
-      consistent_tangent_operator = _f[custom_model]->consistentTangentOperator(stress, intnl, E_ijkl);
-    //E_ijkl;  // TODO: NEEDS TO BE CHANGED !!!!
+    consistent_tangent_operator = E_ijkl; // default
+    if (_tangent_operator_type != elastic)
+      if (update_pm)
+        consistent_tangent_operator = _f[custom_model]->consistentTangentOperator(stress, intnl, E_ijkl);
     return true;
   }
   else
@@ -386,7 +383,13 @@ bool
 ComputeMultiPlasticityStress::returnMap(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & f, unsigned int & iter, const bool & can_revert_to_dumb, bool & linesearch_needed, bool & ld_encountered, bool & constraints_added, const bool & final_step, RankFourTensor & consistent_tangent_operator, std::vector<Real> & cumulative_pm)
 {
 
-  bool successful_return = quickStep(stress_old, stress, intnl_old, intnl, plastic_strain_old, plastic_strain, E_ijkl, strain_increment, f, iter, consistent_tangent_operator);
+  // The "consistency parameters" (plastic multipliers)
+  // Change in plastic strain in this timestep = pm*flowPotential
+  // Each pm must be non-negative
+  std::vector<Real> pm;
+  pm.assign(_num_surfaces, 0.0);
+
+  bool successful_return = quickStep(stress_old, stress, intnl_old, intnl, pm, plastic_strain_old, plastic_strain, E_ijkl, strain_increment, f, iter, consistent_tangent_operator, true);
 
 
   if (successful_return)
@@ -442,12 +445,6 @@ ComputeMultiPlasticityStress::returnMap(const RankTwoTensor & stress_old, RankTw
   // delta_dp = plastic_strain - plastic_strain_old
   // delta_dp = E^{-1}*(initial_stress - stress), where initial_stress = E*(strain - plastic_strain_old)
   RankTwoTensor delta_dp = RankTwoTensor();
-
-  // The "consistency parameters" (plastic multipliers)
-  // Change in plastic strain in this timestep = pm*flowPotential
-  // Each pm must be non-negative
-  std::vector<Real> pm;
-  pm.assign(_num_surfaces, 0.0);
 
   // whether single step was successful (whether line search was successful, and whether turning off constraints was successful)
   bool single_step_success = true;

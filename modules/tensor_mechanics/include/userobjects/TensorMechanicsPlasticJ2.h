@@ -89,8 +89,10 @@ class TensorMechanicsPlasticJ2 : public TensorMechanicsPlasticModel
   /// d(yieldStrength)/d(intnl)
   virtual Real dyieldStrength(const Real & intnl) const;
 
+  /// yield strength, from user input
   const TensorMechanicsHardeningModel & _strength;
 
+  /// user-set flag: custom return map will run in a loop to get an exact solution & check yf < _f_tol
   const bool _update_strength;
 
   /// pre-made identity tensors
@@ -140,13 +142,21 @@ class TensorMechanicsPlasticJ2 : public TensorMechanicsPlasticModel
    * @param[out] trial_stress_inadmissible Should be set to 0 if the trial_stress is admissible, and 1 if the trial_stress is inadmissible.  This can be used by the calling prorgram
    * @return true if a successful return (or a return-map not needed), false if the trial_stress is inadmissible but the return process failed
    */
-  bool returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & returned_stress, Real & returned_intnl, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible) const;
+  bool returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance,
+                        RankTwoTensor & returned_stress, Real & returned_intnl, Real & pm, RankTwoTensor & delta_dp,
+                        std::vector<Real> & yf, unsigned & trial_stress_inadmissible, const bool & update_pm) const;
 
-  void nrStep(const RankTwoTensor & stress, const std::vector<Real> & intnl_old, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijkl, RankTwoTensor & delta_dp, RankTwoTensor & dstress, std::vector<Real> & dpm, std::vector<Real> & dintnl, const std::vector<bool> & active, std::vector<bool> & deactivated_due_to_ld) const;
-
+  /**
+    * Calculates a custom consistent tangent operator.
+    * You may choose to over-ride this in your
+    * derived TensorMechanicsPlasticXXXX class.
+    *
+    * @param stress current stress state
+    * @param intnl internal parameters
+    * @param E_ijkl elasticity tensor
+    * @return the consistent tangent operator for J2 (radial return) case
+    */
   RankFourTensor consistentTangentOperator(const RankTwoTensor & stress, const std::vector<Real> & intnl, const RankFourTensor & E_ijkl) const;
-
-  void calculateJacobian(const RankTwoTensor & stress, const std::vector<Real> & intnl, const std::vector<Real> & pm, const RankFourTensor & E_ijlk, const std::vector<bool> & active, const std::vector<bool> & deactivated_due_to_ld, std::vector<Real> & df_dintnl, std::vector<RankTwoTensor> & df_dstress, std::vector<Real> & jac, const Real & mu) const;
 
 };
 
