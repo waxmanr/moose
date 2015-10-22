@@ -143,7 +143,7 @@ class TensorMechanicsPlasticJ2 : public TensorMechanicsPlasticModel
    * @return true if a successful return (or a return-map not needed), false if the trial_stress is inadmissible but the return process failed
    */
   bool returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl, Real ep_plastic_tolerance,
-                        RankTwoTensor & returned_stress, Real & returned_intnl, Real & pm, RankTwoTensor & delta_dp,
+                        RankTwoTensor & returned_stress, Real & returned_intnl, std::vector<Real> & model_pm, RankTwoTensor & delta_dp,
                         std::vector<Real> & yf, unsigned & trial_stress_inadmissible, const bool & update_pm) const;
 
   /**

@@ -216,8 +216,8 @@ class TensorMechanicsPlasticModel : public GeneralUserObject
     */
   virtual bool returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl,
                                   Real ep_plastic_tolerance, RankTwoTensor & returned_stress, Real & returned_intnl,
-                                  Real & pm, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible,
-                                  const bool & update_pm) const;
+                                  std::vector<Real> & model_pm, RankTwoTensor & delta_dp, std::vector<Real> & yf,
+                                  unsigned & trial_stress_inadmissible, const bool & update_pm) const;
 
   /**
     * Calculates a custom consistent tangent operator.

@@ -346,9 +346,10 @@ protected:
    * @return true if the (stress, intnl) are admissible
    */
   virtual bool quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old,
-                        std::vector<Real> & intnl, std::vector<Real> & pm, const RankTwoTensor & plastic_strain_old,
-                        RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment,
-                        std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator, const bool & update_pm);
+                        std::vector<Real> & intnl, std::vector<Real> & pm, std::vector<Real> & cumulative_pm,
+                        const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl,
+                        const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations,
+                        RankFourTensor & consistent_tangent_operator, const bool & update_pm);
 
   /*
    * performs a plastic step

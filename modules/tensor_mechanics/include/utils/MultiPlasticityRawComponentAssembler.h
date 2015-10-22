@@ -1,4 +1,3 @@
-/****************************************************************/
 /* MOOSE - Multiphysics Object Oriented Simulation Environment  */
 /*                                                              */
 /*          All contents are licensed under LGPL V2.1           */
@@ -52,6 +51,9 @@ protected:
    * Mohr-Coulomb is a single model with 6 surfaces
    */
   unsigned int _num_surfaces;
+
+  /// _surfaces_given_model[model_number] = vector of surface numbers for this model
+  std::vector<std::vector<unsigned int> > _surfaces_given_model;
 
   /// Allows initial set of active constraints to be chosen optimally
   MooseEnum _specialIC;
@@ -217,8 +219,9 @@ protected:
    */
   bool returnMapAll(const RankTwoTensor & trial_stress, const std::vector<Real> & intnl_old, const RankFourTensor & E_ijkl,
                             Real ep_plastic_tolerance, RankTwoTensor & stress, std::vector<Real> & intnl, std::vector<Real> & pm,
-                            RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & num_successful_plastic_returns,
-                            unsigned & custom_model, const bool & update_pm);
+                            std::vector<Real> & cumulative_pm, RankTwoTensor & delta_dp, std::vector<Real> & yf,
+                            unsigned & num_successful_plastic_returns, unsigned & custom_model,
+                            const bool & update_pm);
 
  private:
 
@@ -227,9 +230,6 @@ protected:
 
   /// given a surface number, this returns the corresponding-model's internal surface number
   std::vector<unsigned int> _model_surface_given_surface;
-
-  /// _surfaces_given_model[model_number] = vector of surface numbers for this model
-  std::vector<std::vector<unsigned int> > _surfaces_given_model;
 
   /**
    * "Rock" version

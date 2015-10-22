@@ -489,8 +489,9 @@ MultiPlasticityRawComponentAssembler::buildActiveConstraintsRock(const std::vect
 bool
 MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_stress, const std::vector<Real> & intnl_old,
                                       const RankFourTensor & E_ijkl, Real ep_plastic_tolerance, RankTwoTensor & stress,
-                                      std::vector<Real> & intnl, std::vector<Real> & pm, RankTwoTensor & delta_dp, std::vector<Real> & yf,
-                                      unsigned & num_successful_plastic_returns, unsigned & custom_model, const bool & update_pm)
+                                      std::vector<Real> & intnl, std::vector<Real> & pm, std::vector<Real> & cumulative_pm,
+                                      RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & num_successful_plastic_returns,
+                                      unsigned & custom_model, const bool & update_pm)
 {
   mooseAssert(intnl_old.size() == _num_models, "Incorrect size of internal parameters");
   mooseAssert(intnl.size() == _num_models, "Incorrect size of internal parameters");
@@ -515,7 +516,9 @@ MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_s
   {
     if (using_custom_return_map)
     {
-      bool model_returned = _f[model]->returnMap(trial_stress, intnl_old[model], E_ijkl, ep_plastic_tolerance, returned_stress, intnl[model], pm[model], model_delta_dp, model_f, trial_stress_inadmissible, update_pm);
+      std::vector<Real> model_pm;
+      model_pm.assign(_surfaces_given_model[model].size(),0);
+      bool model_returned = _f[model]->returnMap(trial_stress, intnl_old[model], E_ijkl, ep_plastic_tolerance, returned_stress, intnl[model], model_pm, model_delta_dp, model_f, trial_stress_inadmissible, update_pm);
       if (!trial_stress_inadmissible)
       {
         // in the elastic zone: record the yield-function values
@@ -542,7 +545,7 @@ MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_s
         // record the first returned_stress and delta_dp if everything is going OK
         // as they could be the actual answer
         num_successful_plastic_returns += trial_stress_inadmissible;
-        the_single_plastic_model = model;
+        the_single_plastic_model = custom_model = model;
         stress = returned_stress;
         // note that i break here, and don't push_back
         // model_f to yf.  So now yf contains only the values of
@@ -550,9 +553,6 @@ MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_s
         // also i don't set delta_dp = model_delta_dp yet, because
         // i might find problems later on
 
-        // custom_model usesd to track which model succeeded in custom return map algorithm
-        // used for consistent_tangent_operator in returnMapAll
-        custom_model = model;
         break;
       }
     }
@@ -579,7 +579,6 @@ MultiPlasticityRawComponentAssembler::returnMapAll(const RankTwoTensor & trial_s
       intnl[model] = intnl_old[model];
     return successful_return;
   }
-
 
 
   // Now we know that num_successful_plastic_returns == 1 and all the other

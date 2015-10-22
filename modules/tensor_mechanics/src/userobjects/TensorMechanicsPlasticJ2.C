@@ -101,7 +101,7 @@ TensorMechanicsPlasticJ2::modelName() const
 bool
 TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Real & intnl_old, const RankFourTensor & E_ijkl,
                                 Real /*ep_plastic_tolerance*/, RankTwoTensor & returned_stress, Real & returned_intnl,
-                                Real & pm, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible,
+                                std::vector<Real> & model_pm, RankTwoTensor & delta_dp, std::vector<Real> & yf, unsigned & trial_stress_inadmissible,
                                 const bool & update_pm) const
 {
   yf.resize(1);
@@ -133,7 +133,7 @@ TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Re
     delta_dp = dpm*df_dstress;
     yf[0] = yieldFunction(returned_stress, intnl_old_loop);
     if (update_pm)
-      pm = dpm;
+      model_pm[0] = dpm;
     if (yf[0] > yf_orig) // not converging
     {
       yf[0] = yf_orig;

@@ -137,12 +137,12 @@ ComputeMultiPlasticityStress::computeQpStress()
   bool ld_encountered = false;
   bool constraints_added = false;
 
-  // note tpm unused, just for quickstep fcn param since pm not yet defined
+  // note tpm unused, just for quickstep fcn param since pm/cumulative_pm not yet defined
   std::vector<Real> tpm;
   tpm.assign(0,0);
 
   // try a "quick" return first - this can be purely elastic, or a customised plastic return defined by a TensorMechanicsPlasticXXXX UserObject
-  bool found_solution = quickStep(_stress_old[_qp], _stress[_qp], _intnl_old[_qp], _intnl[_qp], tpm, _plastic_strain_old[_qp], _plastic_strain[_qp], _my_elasticity_tensor, _my_strain_increment, _yf[_qp], number_iterations, _Jacobian_mult[_qp], false);
+  bool found_solution = quickStep(_stress_old[_qp], _stress[_qp], _intnl_old[_qp], _intnl[_qp], tpm, tpm, _plastic_strain_old[_qp], _plastic_strain[_qp], _my_elasticity_tensor, _my_strain_increment, _yf[_qp], number_iterations, _Jacobian_mult[_qp], false);
 
   // if not purely elastic, do some plastic return
   if (!found_solution)
@@ -208,7 +208,11 @@ ComputeMultiPlasticityStress::postReturnMap()
 }
 
 bool
-ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old, std::vector<Real> & intnl, std::vector<Real> & pm, const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl, const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations, RankFourTensor & consistent_tangent_operator, const bool & update_pm)
+ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old,
+                            std::vector<Real> & intnl, std::vector<Real> & pm, std::vector<Real> & cumulative_pm,
+                            const RankTwoTensor & plastic_strain_old, RankTwoTensor & plastic_strain, const RankFourTensor & E_ijkl,
+                            const RankTwoTensor & strain_increment, std::vector<Real> & yf, unsigned int & iterations,
+                            RankFourTensor & consistent_tangent_operator, const bool & update_pm)
 {
   iterations = 0;
 
@@ -218,7 +222,7 @@ ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTw
   // the following does the customized returnMap algorithm
   // for all the plastic models.
   unsigned custom_model = 0;
-  bool successful_return = returnMapAll(stress_old + E_ijkl*strain_increment, intnl_old, E_ijkl, _epp_tol, stress, intnl, pm, delta_dp, yf, num_plastic_returns, custom_model, update_pm);
+  bool successful_return = returnMapAll(stress_old + E_ijkl*strain_increment, intnl_old, E_ijkl, _epp_tol, stress, intnl, pm, cumulative_pm, delta_dp, yf, num_plastic_returns, custom_model, update_pm);
 
   if (num_plastic_returns == 0)
   {
@@ -243,7 +247,17 @@ ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTw
     consistent_tangent_operator = E_ijkl; // default
     if (_tangent_operator_type != elastic)
       if (update_pm)
+      {
         consistent_tangent_operator = _f[custom_model]->consistentTangentOperator(stress, intnl, E_ijkl);
+        /*// add pm from successful custom return map to cumulative_pm
+        int surf_num = 0;
+        for (unsigned this_model = 0 ; this_model < custom_model ; ++this_model)
+          surf_num += _surfaces_given_model[this_model].size();
+        for (unsigned this_surf = surf_num ; this_surf < surf_num + _surfaces_given_model[custom_model].size() ; ++this_surf)
+          cumulative_pm[this_surf] += pm[this_surf];*/
+          // above did not work and didn't get a chance to fix/figure out
+      }
+
     return true;
   }
   else
@@ -389,7 +403,7 @@ ComputeMultiPlasticityStress::returnMap(const RankTwoTensor & stress_old, RankTw
   std::vector<Real> pm;
   pm.assign(_num_surfaces, 0.0);
 
-  bool successful_return = quickStep(stress_old, stress, intnl_old, intnl, pm, plastic_strain_old, plastic_strain, E_ijkl, strain_increment, f, iter, consistent_tangent_operator, true);
+  bool successful_return = quickStep(stress_old, stress, intnl_old, intnl, pm, cumulative_pm, plastic_strain_old, plastic_strain, E_ijkl, strain_increment, f, iter, consistent_tangent_operator, true);
 
 
   if (successful_return)
