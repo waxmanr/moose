@@ -92,9 +92,6 @@ class TensorMechanicsPlasticJ2 : public TensorMechanicsPlasticModel
   /// yield strength, from user input
   const TensorMechanicsHardeningModel & _strength;
 
-  /// user-set flag: custom return map will run in a loop to get an exact solution & check yf < _f_tol
-  const bool _update_strength;
-
   /// max iters for custom return map loop
   unsigned _max_iters;
 

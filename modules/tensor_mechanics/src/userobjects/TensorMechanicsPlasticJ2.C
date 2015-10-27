@@ -19,7 +19,7 @@ InputParameters validParams<TensorMechanicsPlasticJ2>()
 
 TensorMechanicsPlasticJ2::TensorMechanicsPlasticJ2(const InputParameters & parameters) :
     TensorMechanicsPlasticModel(parameters),
-    _strength(getUserObject<TensorMechanicsHardeningModel>("yield_strength")),,
+    _strength(getUserObject<TensorMechanicsHardeningModel>("yield_strength")),
     _max_iters(getParam<unsigned>("max_iterations")),
     _iden(RankTwoTensor::initIdentity),
     _iden4(RankFourTensor::initIdentitySymmetricFour)
