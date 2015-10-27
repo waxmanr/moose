@@ -95,6 +95,9 @@ class TensorMechanicsPlasticJ2 : public TensorMechanicsPlasticModel
   /// user-set flag: custom return map will run in a loop to get an exact solution & check yf < _f_tol
   const bool _update_strength;
 
+  /// max iters for custom return map loop
+  unsigned _max_iters;
+
   /// pre-made identity tensors
   const RankTwoTensor _iden;
   const RankFourTensor _iden4;

@@ -249,7 +249,8 @@ ComputeMultiPlasticityStress::quickStep(const RankTwoTensor & stress_old, RankTw
       if (update_pm)
       {
         consistent_tangent_operator = _f[custom_model]->consistentTangentOperator(stress, intnl, E_ijkl);
-        /*// add pm from successful custom return map to cumulative_pm
+        /* TODO Andy: This is where I tried updating cumulative_pm
+        // add pm from successful custom return map to cumulative_pm
         int surf_num = 0;
         for (unsigned this_model = 0 ; this_model < custom_model ; ++this_model)
           surf_num += _surfaces_given_model[this_model].size();

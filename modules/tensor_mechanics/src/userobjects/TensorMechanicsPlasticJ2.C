@@ -11,7 +11,7 @@ InputParameters validParams<TensorMechanicsPlasticJ2>()
 {
   InputParameters params = validParams<TensorMechanicsPlasticModel>();
   params.addRequiredParam<UserObjectName>("yield_strength", "A TensorMechanicsHardening UserObject that defines hardening of the yield strength");
-  params.addParam<bool>("update_yield_strength", false, "When set to true, yield stress will be updated during custom return map process");
+  params.addParam<unsigned>("max_iterations", 10, "Maximum iterations for custom J2 return map");
   params.addClassDescription("J2 plasticity, associative, with hardening");
 
   return params;
@@ -19,8 +19,8 @@ InputParameters validParams<TensorMechanicsPlasticJ2>()
 
 TensorMechanicsPlasticJ2::TensorMechanicsPlasticJ2(const InputParameters & parameters) :
     TensorMechanicsPlasticModel(parameters),
-    _strength(getUserObject<TensorMechanicsHardeningModel>("yield_strength")),
-    _update_strength(getParam<bool>("update_yield_strength")),
+    _strength(getUserObject<TensorMechanicsHardeningModel>("yield_strength")),,
+    _max_iters(getParam<unsigned>("max_iterations")),
     _iden(RankTwoTensor::initIdentity),
     _iden4(RankFourTensor::initIdentitySymmetricFour)
 {
@@ -108,43 +108,41 @@ TensorMechanicsPlasticJ2::returnMap(const RankTwoTensor & trial_stress, const Re
 
   Real yf_orig = yieldFunction(trial_stress, intnl_old);
 
+  yf[0] = yf_orig;
+
   if (yf_orig < _f_tol)
   {
     // the trial_stress is admissible
     trial_stress_inadmissible = 0;
-    yf[0] = yf_orig;
     return true;
   }
 
-  // TODO: Rachel to check the following formulae - they are wrong for hardening!!
-  // Note that yieldFunction(returned_stress, returned_intnl) should be zero!!
   trial_stress_inadmissible = 1;
   Real mu = E_ijkl(0,1,0,1);
 
-  RankTwoTensor trial_stress_loop = trial_stress;
-  Real intnl_old_loop = intnl_old;
+  RankTwoTensor stress_loop = trial_stress;
+  Real intnl_loop = intnl_old;
+  unsigned iter = 0;
 
   do {
-    Real jac = 3*mu - dyieldFunction_dintnl(trial_stress_loop, intnl_old_loop);
-    Real dpm = yf_orig/jac;
-    RankTwoTensor df_dstress = dyieldFunction_dstress(trial_stress_loop, intnl_old_loop);
-    returned_stress = trial_stress_loop - 2*mu*dpm*df_dstress;
-    returned_intnl = intnl_old_loop + dpm;
+    Real jac = 3*mu - dyieldFunction_dintnl(stress_loop, intnl_loop);
+    Real dpm = yf[0]/jac;
+    RankTwoTensor df_dstress = dyieldFunction_dstress(stress_loop, intnl_loop);
+    returned_stress = stress_loop - 2*mu*dpm*df_dstress;
+    returned_intnl = intnl_loop + dpm;
     delta_dp = dpm*df_dstress;
-    yf[0] = yieldFunction(returned_stress, intnl_old_loop);
+    yf[0] = yieldFunction(returned_stress, intnl_loop);
     if (update_pm)
-      model_pm[0] = dpm;
-    if (yf[0] > yf_orig) // not converging
+      model_pm[0] += dpm;
+    stress_loop = returned_stress;
+    intnl_loop = returned_intnl;
+    ++iter;
+    if (iter > _max_iters) // not converging
     {
       yf[0] = yf_orig;
       return false;
     }
-    trial_stress_loop = returned_stress;
-    intnl_old_loop = returned_intnl;
-  } while (_update_strength && yf[0] > _f_tol);
-
-  if (!_update_strength)
-    yf[0] = 0;
+  } while (yf[0] > _f_tol);
 
   return true;
 }

@@ -342,7 +342,7 @@ protected:
    * @param[out] yf   All the yield functions at (stress, intnl)
    * @param[out] iterations  zero
    * @param[out] consistent_tangent_operator  The consistent tangent operator d(stress_rate)/d(strain_rate)
-   * @param update_pm  true if called from plasticStep::returnMap
+   * @param update_pm  true if called from plasticStep::returnMap, false from computeQpStress
    * @return true if the (stress, intnl) are admissible
    */
   virtual bool quickStep(const RankTwoTensor & stress_old, RankTwoTensor & stress, const std::vector<Real> & intnl_old,

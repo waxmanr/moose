@@ -1,12 +1,6 @@
-# Test designed to compare results and active time between SH/LinearStrainHardening
-# material vs TM j2 plastic user object. As number of elements increases, TM
-# active time increases at a much higher rate than SM. Testing at 4x4x4
-# (64 elements).
-#
-# plot vm_stress vs intnl to see constant hardening
-#
-# Original test located at:
-# tensor_mechanics/tests/j2_plasticity/hard1.i
+# UserObject J2 test, with exponential hardening
+# plot vm_stress vs intnl to see exponential relationship
+# bcs and mesh designed to match j2_hard1_mod & LSH_mod for comparison
 
 [Mesh]
   type = GeneratedMesh
@@ -20,21 +14,15 @@
   ymax = 0.5
   zmin = -0.5
   zmax = 0.5
-  displacements = 'disp_x disp_y disp_z'
 []
+
 
 [Variables]
   [./disp_x]
-    order = FIRST
-    family = LAGRANGE
   [../]
   [./disp_y]
-    order = FIRST
-    family = LAGRANGE
   [../]
   [./disp_z]
-    order = FIRST
-    family = LAGRANGE
   [../]
 []
 
@@ -44,52 +32,6 @@
   [../]
 []
 
-[AuxVariables]
-  [./stress_zz]
-    order = CONSTANT
-    family = MONOMIAL
-  [../]
-  [./intnl]
-    order = CONSTANT
-    family = MONOMIAL
-  [../]
-  [./vm_stress]
-    order = CONSTANT
-    family = MONOMIAL
-  [../]
-  [./eq_pl_strain]
-    order = CONSTANT
-    family = MONOMIAL
-  [../]
-[]
-
-[AuxKernels]
-  [./stress_xx]
-    type = RankTwoAux
-    rank_two_tensor = stress
-    variable = stress_xx
-    index_i = 0
-    index_j = 0
-  [../]
-  [./intnl]
-    type = MaterialStdVectorAux
-    index = 0
-    property = plastic_internal_parameter
-    variable = intnl
-  [../]
-  [./eq_pl_strain]
-    type = RankTwoScalarAux
-    rank_two_tensor = plastic_strain
-    scalar_type = EquivalentPlasticStrain
-    variable = eq_pl_strain
-  [../]
-  [./vm_stress]
-    type = RankTwoScalarAux
-    rank_two_tensor = stress
-    scalar_type = VonMisesStress
-    variable = vm_stress
-  [../]
-[]
 
 [BCs]
   [./left]
@@ -118,16 +60,89 @@
   [../]
 []
 
+[AuxVariables]
+  [./stress_zz]
+    order = CONSTANT
+    family = MONOMIAL
+  [../]
+  [./intnl]
+    order = CONSTANT
+    family = MONOMIAL
+  [../]
+  [./vm_stress]
+    order = CONSTANT
+    family = MONOMIAL
+  [../]
+  [./eq_pl_strain]
+    order = CONSTANT
+    family = MONOMIAL
+  [../]
+[]
+
+[AuxKernels]
+  [./stress_zz]
+    type = RankTwoAux
+    rank_two_tensor = stress
+    variable = stress_zz
+    index_i = 2
+    index_j = 2
+  [../]
+  [./intnl]
+    type = MaterialStdVectorAux
+    index = 0
+    property = plastic_internal_parameter
+    variable = intnl
+  [../]
+  [./vm_stress]
+    type = RankTwoScalarAux
+    rank_two_tensor = stress
+    scalar_type = VonMisesStress
+    variable = vm_stress
+  [../]
+  [./eq_pl_strain]
+    type = RankTwoScalarAux
+    rank_two_tensor = total_strain
+    scalar_type = EquivalentPlasticStrain
+    variable = eq_pl_strain
+  [../]
+[]
+
+[Postprocessors]
+  [./s_zz]
+    type = PointValue
+    point = '0 0 0'
+    variable = stress_zz
+  [../]
+  [./intnl]
+    type = PointValue
+    point = '0 0 0'
+    variable = intnl
+  [../]
+  [./vm_stress]
+    type = PointValue
+    point = '0 0 0'
+    variable = vm_stress
+  [../]
+  [./eq_pl_strain]
+    type = PointValue
+    point = '0 0 0'
+    variable = eq_pl_strain
+  [../]
+[]
+
 [UserObjects]
   [./str]
-    type = TensorMechanicsHardeningConstant
-    value = 2.4e2
+    type = TensorMechanicsHardeningExponential
+    value_0 = 100
+    value_residual = 500
+    rate = 100
   [../]
   [./j2]
     type = TensorMechanicsPlasticJ2
     yield_strength = str
-    yield_function_tolerance = 1E-3
+    yield_function_tolerance = 1E-5
     internal_constraint_tolerance = 1E-9
+    update_yield_strength = true
   [../]
 []
 
@@ -136,9 +151,7 @@
     type = ComputeElasticityTensor
     block = 0
     fill_method = symmetric_isotropic
-    #with E = 2.1e5 and nu = 0.3
-    #Hooke's law: E-nu to Lambda-G
-    C_ijkl = '121154 80769.2'
+    C_ijkl = '0 1E6'
   [../]
   [./strain]
     type = ComputeFiniteStrain
@@ -172,37 +185,13 @@
   nl_abs_tol = 1e-10
   l_tol = 1e-4
   start_time = 0.0
-  end_time = 0.1
-  dt = 0.01
+  end_time = 3.0
+  dt = 0.1
 []
 
-[Postprocessors]
-  [./stress_zz]
-    type = ElementAverageValue
-    variable = stress_zz
-  [../]
-  [./intnl]
-    type = ElementAverageValue
-    variable = intnl
-  [../]
-  [./eq_pl_strain]
-    type = PointValue
-    point = '0 0 0'
-    variable = eq_pl_strain
-  [../]
-  [./vm_stress]
-    type = PointValue
-    point = '0 0 0'
-    variable = vm_stress
-  [../]
-[]
 
 [Outputs]
-<<<<<<< HEAD
-  exodus = true
-=======
   output_initial = true
->>>>>>> Updated j2 return map loop etc. Added exponential hardening test. Have not re-golded yet. Refs #5667.
   csv = true
   print_linear_residuals = false
   print_perf_log = true
