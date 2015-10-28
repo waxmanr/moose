@@ -64,12 +64,12 @@
 []
 
 [AuxKernels]
-  [./stress_xx]
+  [./stress_zz]
     type = RankTwoAux
     rank_two_tensor = stress
-    variable = stress_xx
-    index_i = 0
-    index_j = 0
+    variable = stress_zz
+    index_i = 2
+    index_j = 2
   [../]
   [./intnl]
     type = MaterialStdVectorAux
