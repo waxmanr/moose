@@ -198,11 +198,6 @@
 []
 
 [Outputs]
-<<<<<<< HEAD
-  exodus = true
-=======
-  output_initial = true
->>>>>>> Updated j2 return map loop etc. Added exponential hardening test. Have not re-golded yet. Refs #5667.
   csv = true
   print_linear_residuals = false
   print_perf_log = true
