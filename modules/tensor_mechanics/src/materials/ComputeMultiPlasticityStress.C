@@ -291,8 +291,6 @@ ComputeMultiPlasticityStress::plasticStep(const RankTwoTensor & stress_old, Rank
   Real step_size = 1.0;
   Real time_simulated = 0.0;
 
-  std::cout << "fcn plasticStep() entered." << std::endl; //remove
-
   // the "good" variables hold the latest admissible stress
   // and internal parameters.
   RankTwoTensor stress_good = stress_old;
